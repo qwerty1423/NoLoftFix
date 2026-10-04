@@ -66,7 +66,8 @@ HERE = Path(__file__).resolve().parent
 # --------------------------------------------------------------------------
 # grid spec
 # --------------------------------------------------------------------------
-AXIS_ORDER = ["range_km", "launch_alt_m", "launch_speed_ms", "target_alt_m", "target_speed_ms"]
+AXIS_ORDER = ["range_km", "launch_alt_m",
+              "launch_speed_ms", "target_alt_m", "target_speed_ms"]
 
 # old imperial axis names -> (metric name, factor). Accepted on input so existing
 # grid specs keep working; output is always metric.
@@ -88,7 +89,8 @@ def load_grid(path: Path) -> dict:
     for old, (new, k) in LEGACY_AXES.items():
         if old in g["axes"]:
             if new in g["axes"]:
-                raise SystemExit(f"{path}: specify either {old} or {new}, not both")
+                raise SystemExit(
+                    f"{path}: specify either {old} or {new}, not both")
             g["axes"][new] = [round(v * k, 6) for v in g["axes"].pop(old)]
             print(f"{path}: converted legacy axis {old} -> {new} (x{k})")
     missing = [a for a in AXIS_ORDER if a not in g["axes"]]
@@ -285,16 +287,19 @@ def _solve_one(key, geom, coeffs_path, nodes, order, guess, auth=3.0, dive=30.0,
             "converged": bool(sol["converged"]),
             "_elapsed_s": round(time.time() - t0, 1),
         }
-        ok = math.isfinite(cell["terminal_speed_ms"]) and cell["terminal_speed_ms"] > 0
+        ok = math.isfinite(
+            cell["terminal_speed_ms"]) and cell["terminal_speed_ms"] > 0
+        # and cell["fit_rmse_m"] < 1000
         rec = {"key": key, "ok": ok, "cell": cell if ok else None,
                "elapsed_s": cell["_elapsed_s"],
-               "error": None if ok else "solver returned a non-finite speed",
+               "error": None if ok else "rmse probably too high",
                "converged": cell["converged"],
                "terminal_speed_ms": cell["terminal_speed_ms"]}
         if ok:
             # carry the trajectory forward for the next cell in the ray; stripped
             # before it reaches the store
-            rec["_sol"] = {k: sol[k] for k in ("x", "h", "V", "gamma", "mass", "alpha", "tof")}
+            rec["_sol"] = {k: sol[k]
+                           for k in ("x", "h", "V", "gamma", "mass", "alpha", "tof")}
         return rec
     except Exception as e:
         return {"key": key, "ok": False, "cell": None,
@@ -315,7 +320,8 @@ def _ray_entry(work, coeffs_path, nodes, order, auth, dive, maxiter=250):
     out = []
     guess = None
     for (key, geom, _seed) in entries:
-        rec = _solve_one(key, geom, coeffs_path, nodes, order, guess, auth, dive, maxiter)
+        rec = _solve_one(key, geom, coeffs_path, nodes,
+                         order, guess, auth, dive, maxiter)
         guess = rec.pop("_sol", None) if rec["ok"] else guess
         out.append((key, rec))
     return out
@@ -328,7 +334,8 @@ def cmd_run(g, a):
     store = Store(a.runs / g["name"])
     done = store.index()
     warn_rejected(store)
-    coeffs_path = str((HERE / g["coeffs"]).resolve()) if not Path(g["coeffs"]).is_absolute() else g["coeffs"]
+    coeffs_path = str((HERE / g["coeffs"]).resolve()
+                      ) if not Path(g["coeffs"]).is_absolute() else g["coeffs"]
 
     todo = []
     for geom in enumerate_cells(g):
@@ -376,7 +383,8 @@ def cmd_run(g, a):
             items.sort(key=lambda t: t[1]["range_km"])
             seeded = [(k, gm, None) for (k, gm) in items]
             work.append((rk, [(k, gm, sd) for (k, gm, sd) in seeded]))
-        print(f"scheduled {len(work)} rays (warm start on), longest {max(len(w[1]) for w in work)} cells")
+        print(
+            f"scheduled {len(work)} rays (warm start on), longest {max(len(w[1]) for w in work)} cells")
 
     # maxtasksperchild bounds the memory OpenMDAO leaks across solves
     with ProcessPoolExecutor(max_workers=a.jobs, max_tasks_per_child=a.max_tasks) as ex:
@@ -436,17 +444,19 @@ def cmd_status(g, a):
     ok = {k: r for k, r in done.items() if r.get("ok")}
     failed = {k: r for k, r in done.items() if not r.get("ok")}
     conv = sum(1 for r in ok.values() if r.get("converged"))
-    print(f"{g['name']}: {len(ok)}/{total} done ({100*len(ok)/max(total,1):.1f}%), "
+    print(f"{g['name']}: {len(ok)}/{total} done ({100*len(ok)/max(total, 1):.1f}%), "
           f"{len(failed)} failed, {conv} of {len(ok)} converged")
     if ok:
-        sp = [r["terminal_speed_ms"] for r in ok.values() if r.get("terminal_speed_ms")]
+        sp = [r["terminal_speed_ms"]
+              for r in ok.values() if r.get("terminal_speed_ms")]
         el = [r.get("elapsed_s", 0) for r in ok.values()]
         if sp:
-            print(f"  terminal speed {min(sp):.0f}..{max(sp):.0f} m/s, mean {sum(sp)/len(sp):.0f}")
+            print(
+                f"  terminal speed {min(sp):.0f}..{max(sp):.0f} m/s, mean {sum(sp)/len(sp):.0f}")
         if el:
             rem = total - len(ok) - (0 if a.retry_failed else len(failed))
             print(f"  mean {sum(el)/len(el):.1f} s/cell -> "
-                  f"~{rem*sum(el)/len(el)/max(a.jobs,1)/60:.0f} min left at {a.jobs} jobs")
+                  f"~{rem*sum(el)/len(el)/max(a.jobs, 1)/60:.0f} min left at {a.jobs} jobs")
     for k, r in list(failed.items())[:10]:
         print(f"  FAILED {k}: {r.get('error')}")
     if len(failed) > 10:
@@ -485,7 +495,8 @@ def main():
     ap.add_argument("--grid", required=True)
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--nodes", type=int, help="override the grid spec")
-    ap.add_argument("--limit", type=int, default=0, help="run at most N cells (smoke test)")
+    ap.add_argument("--limit", type=int, default=0,
+                    help="run at most N cells (smoke test)")
     ap.add_argument("--timeout", type=float, default=900.0)
     ap.add_argument("--max-tasks", type=int, default=8,
                     help="restart each worker after this many cells (OpenMDAO leaks)")
