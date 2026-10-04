@@ -112,7 +112,7 @@ namespace NOLoftFix
             s._flightLogIntervalS = cfg.Bind(fol, "FlightLogIntervalS", 1f,
                 "Seconds between [flight] and [terminal] lines. Live.");
 
-            s._debugDraw = cfg.Bind(fol, "DebugDraw", true,
+            s._debugDraw = cfg.Bind(fol, "DebugDraw", false,
                 "Draw the remaining reference profile with a LineRenderer. Live.");
 
             s.minCellTerminalSpeedMs = cfg.Bind(gen, "MinCellTerminalSpeedMs", 0f,
