@@ -1,0 +1,72 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="Local.props" Condition="Exists('Local.props')" />
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>NOLoftFix</AssemblyName>
+    <RootNamespace>NOLoftFix</RootNamespace>
+    <Product>NOLoftFix</Product>
+    <Description>Reference-profile midcourse lofting for the AAM-29 Scythe (CEAS-GNC-2026-016 APG, expressed as aimpoint placement)</Description>
+    <Version>0.1.0</Version>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RestoreAdditionalProjectSources>
+      https://api.nuget.org/v3/index.json;
+      https://nuget.bepinex.dev/v3/index.json;
+      https://nuget.samboy.dev/v3/index.json
+    </RestoreAdditionalProjectSources>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS0649;CS0169</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Analyzers" Version="1.0.8" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.Core" Version="5.4.21" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="2.1.0" />
+    <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.3" PrivateAssets="all" />
+    <PackageReference Include="UnityEngine.Modules" Version="2022.3.62" IncludeAssets="compile" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <TableFiles Include="Tables\*.json" />
+  </ItemGroup>
+
+  <!-- Copy the DLL + Tables/ into the game's BepInEx/plugins folder on Debug builds. -->
+  <PropertyGroup>
+    <PluginDeployPath Condition="'$(NuclearOptionDir)' != '' and Exists('$(NuclearOptionDir)/BepInEx/plugins')">$(NuclearOptionDir)/BepInEx/plugins/$(AssemblyName)</PluginDeployPath>
+  </PropertyGroup>
+
+  <Target Name="DeployPlugin" AfterTargets="Build"
+          Condition="'$(Configuration)' == 'Debug' and '$(PluginDeployPath)' != ''"
+          Inputs="$(OutputPath)$(AssemblyName).dll;@(TableFiles)"
+          Outputs="$(PluginDeployPath)/$(AssemblyName).dll">
+    <Exec Command="rsync -rcv --mkpath &quot;$(OutputPath)$(AssemblyName).dll&quot; &quot;$(PluginDeployPath)/&quot;" />
+    <!-- Deliberately no delete flag here. mod/Tables holds only
+         loft_tables.example.json, while the real generated table lives in the
+         deployed Tables/ folder: it is user data, not a build artefact. Mirroring
+         with deletion would silently remove it on every build. -->
+    <Exec Command="rsync -rcv --mkpath &quot;$(MSBuildProjectDirectory)/Tables/&quot; &quot;$(PluginDeployPath)/Tables/&quot;" />
+  </Target>
+
+  <Target Name="WarnNoDeploy" AfterTargets="Build"
+          Condition="'$(Configuration)' == 'Debug' and '$(PluginDeployPath)' == ''">
+    <Warning Text="NOLoftFix was built but NOT deployed: NuclearOptionDir is unset or has no BepInEx/plugins. Copy Local.props.example.txt to Local.props and set it, or the game will keep loading the previous DLL." />
+  </Target>
+
+  <Target Name="CreateZip" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'"
+          Inputs="$(OutputPath)$(AssemblyName).dll;README.md;@(TableFiles)"
+          Outputs="$(OutputPath)../$(AssemblyName)-$(Version).zip">
+    <PropertyGroup>
+      <StagingDir>$(OutputPath)Staging</StagingDir>
+      <RootModFolder>$(StagingDir)/$(AssemblyName)</RootModFolder>
+    </PropertyGroup>
+    <Exec Command="rsync -rcv --mkpath &quot;$(OutputPath)$(AssemblyName).dll&quot; &quot;$(RootModFolder)/&quot;" />
+    <Exec Command="rsync -rcv --delete --mkpath &quot;$(MSBuildProjectDirectory)/Tables/&quot; &quot;$(RootModFolder)/Tables/&quot;" />
+    <Exec Command="rsync -rcv --mkpath &quot;README.md&quot; &quot;$(RootModFolder)/&quot;" />
+    <Exec Command="cd &quot;$(StagingDir)&quot; &amp;&amp; zip -qr &quot;../$(AssemblyName)-$(Version).zip&quot; &quot;$(AssemblyName)&quot;" />
+  </Target>
+
+</Project>

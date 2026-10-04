@@ -1,0 +1,13 @@
+*__pycache__
+*.venv
+*dymos_opt_out
+
+*.zip
+
+/uploads/**
+/mod/bin
+/mod/obj
+/sim/runs
+
+/mod/Local.props
+*coeffs*

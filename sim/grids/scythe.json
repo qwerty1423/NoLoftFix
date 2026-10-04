@@ -1,0 +1,16 @@
+{
+  "name": "scythe",
+  "missile": "AAM2",
+  "coeffs": "coeffs_aam2.json",
+  "nodes": 12,
+  "lookahead_s": 3.0,
+  "min_authority_g": 3.0,
+  "maxiter": 1000,
+  "axes": {
+    "range_km": [15, 30, 50, 75, 100, 130, 165],
+    "launch_alt_m": [250, 4000, 9000, 15000],
+    "launch_speed_ms": [180, 320, 460],
+    "target_alt_m": [200, 4000, 12000],
+    "target_speed_ms": [0]
+  }
+}

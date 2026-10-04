@@ -1,0 +1,13 @@
+<Project>
+  <!-- Copy this file to Local.props and edit the path to your Nuclear Option install.
+       Until you do, `dotnet build` compiles NOLoftFix but does NOT deploy it, and the
+       game keeps loading whatever DLL was last copied in by hand. Local.props is not
+       meant to be committed. -->
+  <PropertyGroup>
+    <!-- Windows -->
+    <NuclearOptionDir>C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option</NuclearOptionDir>
+    <!-- Linux / Proton: comment the line above and use this one instead
+    <NuclearOptionDir>$(HOME)/.local/share/Steam/steamapps/common/Nuclear Option</NuclearOptionDir>
+    -->
+  </PropertyGroup>
+</Project>
