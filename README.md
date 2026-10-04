@@ -1,5 +1,9 @@
 # NOLoftFix
 
+This project is an unofficial community modification and is not affiliated with, sponsored by, or endorsed by Shockfront Studios Pty Ltd. Original Nuclear Option assets, vehicle designs, audio, and code are Copyright (c) 2026 Shockfront Studios Pty Ltd. All rights reserved. Nuclear Option and Shockfront Studios are trademarks or registered trademarks of Shockfront Studios Pty Ltd. Original mod content and all other trademarks belong to their respective owners.
+
+---
+
 warning - LLMs were used
 
 some files were omitted from the repo
@@ -29,6 +33,6 @@ and then you can copy the table to mod/Tables
 
 I have provided a loft table I have generated, but currently only at 250 max iterations so it isn't great.
 
-might break the scimitar, it is optimised only for the scythe currently?
+might break the scimitar, it is only good for the scythe currently? probably just the scimitar being bad because of nerfs though.
 
 based on <https://doi.org/10.82124/CEAS-GNC-2026-016> but vibecoded so... again... the implementation is probably not great
