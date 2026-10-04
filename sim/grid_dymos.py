@@ -288,11 +288,10 @@ def _solve_one(key, geom, coeffs_path, nodes, order, guess, auth=3.0, dive=30.0,
             "_elapsed_s": round(time.time() - t0, 1),
         }
         ok = math.isfinite(
-            cell["terminal_speed_ms"]) and cell["terminal_speed_ms"] > 0
-        # and cell["fit_rmse_m"] < 1000
+            cell["terminal_speed_ms"]) and cell["terminal_speed_ms"] > 0 and cell["fit_rmse_m"] < 1000
         rec = {"key": key, "ok": ok, "cell": cell if ok else None,
                "elapsed_s": cell["_elapsed_s"],
-               "error": None if ok else "rmse probably too high",
+               "error": None if ok else f"rmse probably too high: {cell["fit_rmse_m"]}",
                "converged": cell["converged"],
                "terminal_speed_ms": cell["terminal_speed_ms"]}
         if ok:
