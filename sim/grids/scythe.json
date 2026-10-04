@@ -4,7 +4,7 @@
   "coeffs": "coeffs_aam2.json",
   "nodes": 12,
   "lookahead_s": 3.0,
-  "min_authority_g": 3.0,
+  "min_authority_g": 0.5,
   "maxiter": 250,
   "axes": {
     "range_km": [15, 30, 50, 75, 100, 130, 165],
