@@ -330,6 +330,84 @@ class ProcessPoolExecutor(_PoolExecutor):
         return super().shutdown(wait=wait, cancel_futures=cancel_futures)
 
 
+def _child_pids(include_dead_parents: bool = True) -> list[int]:
+    """Every process whose parent is us, read from /proc.
+
+    The pool's own bookkeeping is not enough on the way out: with
+    `max_tasks_per_child` a worker is recycled between cells, and a pool that is
+    mid-shutdown (or a manager process) can hold a process this PID did not list.
+    Reading /proc by parent PID is exact -- it can only find our own children --
+    which is why it is used instead of anything that matches a command line. A
+    pattern match on this program's name is the quick way to kill something with
+    nothing to do with the run, shell included.
+    """
+    me = os.getpid()
+    found = []
+    try:
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                with open(f"/proc/{entry}/stat", "rb") as fh:
+                    fields = fh.read().rsplit(b")", 1)[1].split()
+                ppid = int(fields[1])
+            except Exception:                      # noqa: BLE001 - it died, or no /proc
+                continue
+            if ppid == me:
+                found.append(int(entry))
+    except Exception:                              # noqa: BLE001 - no /proc: nothing to do
+        return []
+    return found
+
+
+def _kill_children_now() -> int:
+    """SIGKILL every child of this process, without waiting. For the second press:
+    nothing is being negotiated any more, so nothing is asked politely."""
+    n = 0
+    for pid in _child_pids():
+        try:
+            os.kill(pid, signal.SIGKILL)
+            n += 1
+        except ProcessLookupError:
+            pass
+    return n
+
+
+def _reap_children(grace: float = 2.0, quiet: bool = True) -> int:
+    """SIGTERM then SIGKILL our own children, so nothing outlives the parent.
+
+    A worker that is orphaned exits on its own -- it watches its parent -- but only
+    if its watchdog thread gets to run, and a process stuck in a library call is not
+    guaranteed to give it the GIL. This does not rely on the child's cooperation.
+    """
+    pids = _child_pids()
+    if not pids:
+        return 0
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    deadline = time.time() + grace
+    while time.time() < deadline:
+        alive = [p for p in pids if os.path.exists(f"/proc/{p}")]
+        if not alive:
+            break
+        time.sleep(0.05)
+    killed = 0
+    for pid in pids:
+        if os.path.exists(f"/proc/{pid}"):
+            try:
+                os.kill(pid, signal.SIGKILL)
+                killed += 1
+            except ProcessLookupError:
+                pass
+    if not quiet and killed:
+        print(f"NOTE: {killed} child process(es) needed SIGKILL to stop; they are "
+              f"gone now.", file=sys.stderr)
+    return len(pids)
+
+
 def _stop_workers():
     """Terminate every worker of every live pool; SIGKILL whatever will not go."""
     import logging
@@ -349,17 +427,117 @@ def _stop_workers():
     for p in procs:
         if p.is_alive():
             p.kill()
+    # The pool's list can be incomplete mid-shutdown (recycled workers, the
+    # manager's own children), so finish the job against /proc.
+    _reap_children(grace=2.0)
     return len(procs)
 
 
+_STOPPING = False
+
+
 def _stop_now(signum, _frame):
-    """SIGINT / SIGTERM / SIGHUP: stop the workers, say so, and exit."""
-    n = _stop_workers()
-    print(f"\n{signal.Signals(signum).name}: stopping"
-          + (f" -- {n} worker process(es) terminated." if n else "."))
-    print("  Finished cells are on disk; re-run the same command to resume.")
+    """SIGINT / SIGTERM / SIGHUP: stop the workers, say so, and leave.
+
+    This runs in a signal handler, and it leaves with `os._exit`, not by raising
+    SystemExit. It used to raise: the exception travelled up through whatever was
+    on the stack, which at the end of a run is the interpreter's own shutdown (the
+    `concurrent.futures` atexit hook joining a pool's manager thread). Raised there,
+    it printed "Exception ignored on threading shutdown" and left the process in
+    exactly the state it was trying to escape, so Ctrl-C had to be pressed again --
+    three times, in the report that produced this. A hard exit after the workers
+    have been terminated is what the handler actually wants to do, and it cannot be
+    swallowed by anything.
+
+    A second signal does not repeat the ceremony: it SIGKILLs whatever is still a
+    child of this process and exits at once. Once the workers are gone and the
+    message is printed, the only thing left to do is die, and a person pressing
+    Ctrl-C twice wants the same thing -- immediately.
+    """
+    global _STOPPING
+    if _STOPPING:
+        # A second press is not a request: kill whatever is still ours and go.
+        _kill_children_now()
+        os._exit(128 + signum)
+    _STOPPING = True
+    # Say so before the tidying, not after: stopping the workers can take a few
+    # seconds (each is asked to stop, then killed), and a Ctrl-C that produces no
+    # output for that long reads as another hang.
+    print(f"\n{signal.Signals(signum).name}: stopping ...")
     sys.stdout.flush()
-    raise SystemExit(128 + signum)
+    try:
+        n = _stop_workers()
+        print(f"  {n} worker process(es) terminated." if n else "  no workers to stop.")
+        print("  Finished cells are on disk; re-run the same command to resume.")
+        sys.stdout.flush()
+    except Exception:                              # noqa: BLE001 - leaving anyway
+        pass
+    _leave(128 + signum)
+
+def _lingering_manager_threads(timeout: float = 2.0,
+                               out=sys.stderr) -> list[str]:
+    """Join the futures manager threads the interpreter would otherwise wait for
+    forever, and report the ones that will not go.
+
+    `concurrent.futures.process` registers an atexit hook that joins every pool's
+    manager thread. A manager thread that is itself stuck in its shutdown path (it
+    can be, with `max_tasks_per_child` recycling workers) blocks that hook, the
+    interpreter never finishes exiting, and what a person sees is a finished run
+    that does not return to the prompt -- with Ctrl-C now arriving inside the
+    shutdown machinery, which is how a SIGINT ended up as "Exception ignored on
+    threading shutdown" in the report that led here.
+
+    Joining here, with a deadline, means the wait is bounded and visible instead of
+    open-ended and silent. Returns the names of any that would not join.
+    """
+    try:
+        from concurrent.futures import process as _cfp
+        threads = [th for th in list(getattr(_cfp, "_threads_wakeups", {}) or [])
+                   if th.is_alive()]
+    except Exception:                              # noqa: BLE001 - private API
+        return []
+    stuck = []
+    for th in threads:
+        th.join(timeout)
+        if th.is_alive():
+            stuck.append(getattr(th, "name", "?") or "?")
+    if stuck:
+        print(f"NOTE: a worker pool's manager thread ({', '.join(stuck)}) did not "
+              f"finish shutting down; exiting without waiting for it. Cell files are "
+              f"written atomically, so nothing on disk is half-written.",
+              file=out)
+    return stuck
+
+
+def _leave(rc: int = 0) -> None:
+    """Exit the process, deterministically, flushing first.
+
+    The interpreter's own exit path can block on the futures atexit hook (see
+    `_lingering_manager_threads`), so a command that has finished its work does not
+    trust it: flush, give any lingering manager thread a bounded chance, drop this
+    process's throwaway OpenMDAO tree, and `os._exit`. Every exit in this file goes
+    through here, including the signal handlers, so "the run finished" and "you are
+    back at the prompt" are the same event.
+
+    Nothing is lost by not running Python's other atexit handlers: the only one this
+    program registers is the pool join that is deliberately being skipped, and the
+    cells and the log are already fsynced by `Store.put`.
+    """
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:                              # noqa: BLE001
+        pass
+    _lingering_manager_threads()
+    # Nothing of ours may outlive us -- a worker that is listening, or one that has
+    # not noticed we are gone, is an orphan eating a core.
+    _reap_children(grace=1.0)
+    try:
+        _drop_workdir()
+    except Exception:                              # noqa: BLE001
+        pass
+    os._exit(rc)
+
 
 from pathlib import Path
 
@@ -2449,7 +2627,7 @@ def main():
     elif a.merge:
         cmd_merge(g, a)
     elif a.check:
-        sys.exit(cmd_check(g, a))
+        return cmd_check(g, a)
     elif a.compact_state:
         cmd_compact_state(g, a)
     elif a.prune_attempts:
@@ -2462,7 +2640,20 @@ def main():
         cmd_reopt(g, a)
     else:
         cmd_run(g, a)
+    return 0
+
+
+def cli() -> int:
+    """Entry point: run the command, then leave through `_leave`, never through the
+    interpreter's exit path."""
+    try:
+        rc = main()
+    except SystemExit as e:                        # argparse, or an explicit exit
+        code = e.code
+        rc = 0 if code is None else (code if isinstance(code, int) else 1)
+        return _leave(rc)
+    return _leave(int(rc or 0))
 
 
 if __name__ == "__main__":
-    main()
+    cli()
