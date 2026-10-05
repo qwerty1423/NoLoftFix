@@ -25,6 +25,10 @@ The aero tables are the SAME Curve objects the simulator uses, so the two tools
 cannot disagree about the airframe.
 """
 from __future__ import annotations
+from missile_sim import Coeffs, Curve
+import dymos as dm
+import openmdao.api as om
+import numpy as np
 
 import argparse
 import json
@@ -60,12 +64,7 @@ def _isolate_workdir():
     return d
 
 
-import numpy as np
-import openmdao.api as om
-import dymos as dm
-
 sys.path.insert(0, str(Path(__file__).parent))
-from missile_sim import Coeffs, Curve
 
 FT = 0.3048
 NMI = 1852.0
@@ -167,7 +166,8 @@ class MissileODE(om.ExplicitComponent):
             mult[hi] = 1.0 + c.supersonic_drag
             if np.any(mid):
                 n6 = np.minimum(np.abs(a_snd[mid] - V[mid]) / a_snd[mid], 0.1)
-                mult[mid] = 1.0 + ((0.1 - n6) / 0.1) ** 3 * (c.supersonic_drag + 0.15)
+                mult[mid] = 1.0 + ((0.1 - n6) / 0.1) ** 3 * \
+                    (c.supersonic_drag + 0.15)
             D = D * mult
 
         ca, sa = np.cos(al), np.sin(al)
@@ -190,12 +190,17 @@ def thrust_profile(coeffs: Coeffs, t_guess: float, n: int):
     ts, T, br = [], [], []
     t = 0.0
     for mo in coeffs.motors:
-        ts += [t, t + mo.delay]; T += [0.0, 0.0]; br += [0.0, 0.0]
+        ts += [t, t + mo.delay]
+        T += [0.0, 0.0]
+        br += [0.0, 0.0]
         t += mo.delay
-        ts += [t, t + mo.burn_time]; T += [mo.thrust, mo.thrust]
+        ts += [t, t + mo.burn_time]
+        T += [mo.thrust, mo.thrust]
         br += [mo.fuel_mass / mo.burn_time] * 2
         t += mo.burn_time
-    ts += [max(t, total_burn), t_guess * 1.5]; T += [0.0, 0.0]; br += [0.0, 0.0]
+    ts += [max(t, total_burn), t_guess * 1.5]
+    T += [0.0, 0.0]
+    br += [0.0, 0.0]
     tt = np.linspace(0.0, t_guess * 1.2, n)
     return tt, np.interp(tt, ts, T), np.interp(tt, ts, br)
 
@@ -239,7 +244,8 @@ def solve(coeffs_path, range_km, launch_alt_m, target_alt_m, launch_speed_ms,
     traj.add_phase("mid", ph)
     p.model.add_subsystem("traj", traj)
 
-    ph.set_time_options(fix_initial=True, duration_bounds=(t_guess * 0.5, t_guess * 3.0))
+    ph.set_time_options(fix_initial=True, duration_bounds=(
+        t_guess * 0.5, t_guess * 3.0))
     ph.add_state("x", fix_initial=True, fix_final=True, rate_source="xdot",
                  ref=Xf)
     ph.add_state("h", fix_initial=True, fix_final=True, rate_source="hdot",
@@ -258,19 +264,15 @@ def solve(coeffs_path, range_km, launch_alt_m, target_alt_m, launch_speed_ms,
     # structural limit. This is what stops the over-loft. Set 0 to disable.
     if min_authority_g and min_authority_g > 0.0:
         ph.add_path_constraint("navail", lower=min_authority_g)
-    # OFF by default. Maximising V_final alone drives the descent as steep
-    # as the aero allows -- measured on a solved 100 km cell the last 10 km of
-    # downrange dropped 10 660 m (47 deg, 58.8 deg peak), and the game's seeker
-    # takes over at terminalRange (12 km) with a turn rate of
-    # min(maxTurnRate, 9.81*gLimit/V), i.e. ~11 deg/s at 1500 m/s. It cannot pull
-    # out of that. Same class of bug as the over-loft: the cost had no term for
-    # it, so nothing stopped it.
-    if max_dive_deg and max_dive_deg > 0.0:
-        ph.add_path_constraint("gamma", lower=-math.radians(max_dive_deg))
-    ph.add_boundary_constraint("V", loc="final", lower=c.self_destruct_at_speed)
+    # OFF by default, useless.
+    # if max_dive_deg and max_dive_deg > 0.0:
+    #     ph.add_path_constraint("gamma", lower=-math.radians(max_dive_deg))
+    ph.add_boundary_constraint(
+        "V", loc="final", lower=c.self_destruct_at_speed)
     ph.add_objective("V", loc="final", scaler=-1.0 / 1000.0)
 
-    p.driver = om.ScipyOptimizeDriver(optimizer="SLSQP", tol=1e-6, maxiter=int(maxiter))
+    p.driver = om.ScipyOptimizeDriver(
+        optimizer="SLSQP", tol=1e-6, maxiter=int(maxiter))
     p.setup()          # setup() MUST precede set_*_val, or state shape is unknown
 
     ph.set_time_val(initial=0.0, duration=t_guess)
@@ -288,6 +290,7 @@ def solve(coeffs_path, range_km, launch_alt_m, target_alt_m, launch_speed_ms,
             # uniform ramp of the right length for each array. It is only an
             # initial guess, and both solves share a mesh, so the values already
             # line up node-for-node.
+
             def tv(a):
                 return np.linspace(0.0, tof, len(np.asarray(a).ravel()))
             ph.set_time_val(initial=0.0, duration=tof)
@@ -362,15 +365,16 @@ def fit_polynomial(sol, order=7):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--coeffs", default=str(Path(__file__).parent / "coeffs_placeholder.json"))
+    ap.add_argument(
+        "--coeffs", default=str(Path(__file__).parent / "coeffs_aam2.json"))
     ap.add_argument("--range-km", type=float, default=74.0)
     ap.add_argument("--launch-alt", type=float, default=13716.0, help="metres")
     ap.add_argument("--target-alt", type=float, default=457.0, help="metres")
     ap.add_argument("--launch-speed", type=float, default=350.0, help="m/s")
     ap.add_argument("--nodes", type=int, default=40)
-    ap.add_argument("--min-authority", type=float, default=3.0,
+    ap.add_argument("--min-authority", type=float, default=0.1,
                     help="minimum available load factor (g) along the trajectory")
-    ap.add_argument("--max-dive", type=float, default=30.0,
+    ap.add_argument("--max-dive", type=float, default=0.0,
                     help="steepest allowed descent angle (deg below horizontal); "
                          "0 = unconstrained (default)")
     ap.add_argument("--out", default="")
@@ -379,12 +383,15 @@ if __name__ == "__main__":
     s = solve(a.coeffs, a.range_km, a.launch_alt, a.target_alt, a.launch_speed,
               a.nodes, min_authority_g=a.min_authority, max_dive_deg=a.max_dive)
     print(f"\n=== Dymos solution, {a.range_km:.0f} km ===")
-    print(f"  driver         : {'CONVERGED' if s['converged'] else 'NOT CONVERGED -> ' + s['msg']}")
-    print(f"  terminal speed : {s['V_term']:8.1f} m/s = {s['V_term']/340:.2f} M")
+    print(
+        f"  driver         : {'CONVERGED' if s['converged'] else 'NOT CONVERGED -> ' + s['msg']}")
+    print(
+        f"  terminal speed : {s['V_term']:8.1f} m/s = {s['V_term']/340:.2f} M")
     print(f"  TOF            : {s['tof']:8.1f} s")
-    print(f"  apex           : {s['apex']:8.0f} m at {s['apex_x']/1000:.1f} km")
+    print(
+        f"  apex           : {s['apex']:8.0f} m at {s['apex_x']/1000:.1f} km")
     poly, rmse = fit_polynomial(s)
-    print(f"  poly a0..a7    : {[round(v,1) for v in poly]}")
+    print(f"  poly a0..a7    : {[round(v, 1) for v in poly]}")
     print(f"  fit RMSE       : {rmse:.1f} m")
     if a.out:
         Path(a.out).write_text(json.dumps({"poly_order": 7, "poly_a": poly,
