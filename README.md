@@ -24,15 +24,15 @@ cd sim
 
 python3 parse_unity.py --prefab ../txt/AAM2.txt --assets ../txt/GameAssets.txt --out coeffs_aam2.json
 
-OMP_NUM_THREADS=1 python3 grid_dymos.py --grid grids/scythe.json --jobs 15 --max-tasks 300 --timeout 100000
+OMP_NUM_THREADS=1 python3 grid_dymos.py --grid grids/scythe2.json --jobs 15
 
-python3 grid_dymos.py --grid grids/scythe.json --merge
+python3 grid_dymos.py --grid grids/scythe2.json --merge
 ```
 
 and then you can copy the table to mod/Tables
 
-I have provided a loft table I have generated, but currently only at 250 max iterations so it isn't great.
+I have provided some loft tables I have generated.
 
-might break the scimitar, it is only good for the scythe currently? probably just the scimitar being bad because of nerfs though.
+may improve missile performance. 
 
-based on <https://doi.org/10.82124/CEAS-GNC-2026-016> but vibecoded so... again... the implementation is probably not great
+based on <https://doi.org/10.82124/CEAS-GNC-2026-016> but vibecoded so... again... the implementation is probably not great.
