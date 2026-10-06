@@ -1,11 +1,11 @@
 {
-  "name": "scythe",
+  "name": "scythe2",
   "missile": "AAM2",
   "coeffs": "coeffs_aam2.json",
   "nodes": 12,
   "order": 7,
   "lookahead_s": 3.0,
-  "min_authority_g": 0.1,
+  "min_authority_g": 0.5,
   "maxiter": 250,
   "refine_iterations": 0,
   "refine_tol": 0.0001,
