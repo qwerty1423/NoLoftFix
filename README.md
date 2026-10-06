@@ -4,7 +4,9 @@ This project is an unofficial community modification and is not affiliated with,
 
 ---
 
-warning - LLMs were used
+[NO discord mod forum post](https://discord.com/channels/909034158205059082/1557018166868312094/1557018166868312094)
+
+LLMs were used to make this mod
 
 some files were omitted from the repo
 
@@ -14,7 +16,9 @@ The mod only patches code that runs if you are host, so you can safely join vani
 
 May improve scythe performance. The scythe will now hit targets up to around 250 km as long as they are easy targets such as AI helicopters, by lofting properly. AI fighters can be hit around half the time at around 90 km. Effectiveness against human targets is mostly unchanged thanks to ecm, mcm, and sea skimming. The scimitar's performance is mostly unchanged because of its drag nerfs, making lofting rather useless.
 
-You can use sim/grid_dymos.py to run the optimiser, it will make loft_tables.json for you. The process is something like this, I think? replace --jobs 15 with around twice the number of your cpu cores.
+I have provided some loft tables I have generated previously. I recommend just using those as they are probably good enough. 
+
+If you want to optimise some missiles yourself, you can use sim/grid_dymos.py to run the optimiser, it will make loft_tables.json for you. After cloning the repo, the process is something like this, I think? replace --jobs 15 with around twice the number of your cpu cores.
 
 you will also need to run parse_unity.py to get a copy of coeffs_aam2.json.
 
@@ -31,6 +35,6 @@ OMP_NUM_THREADS=1 python3 grid_dymos.py --grid grids/scythe2.json --jobs 15
 python3 grid_dymos.py --grid grids/scythe2.json --merge
 ```
 
-and then you can copy the table to mod/Tables. or the Tables directory next to the dll. I have provided some loft tables I have generated previously. I recommend just using those as they are probably good enough.
+and then you can copy the table to mod/Tables. or the Tables directory next to the dll.
 
 based on <https://doi.org/10.82124/CEAS-GNC-2026-016> but vibecoded so... again... the implementation is probably not great.
