@@ -39,7 +39,7 @@ namespace NOLoftFix
         // ownerPos + forward*100000f, a placeholder the game itself ignores.
         private static void Postfix(ARHSeeker __instance)
         {
-            if (!Plugin.Ready) return;
+            if (!Plugin.Ready || __instance.missile == null || !__instance.missile.LocalSim) return;
             try
             {
                 // do this even when no table matched: a zeroed loftAmount plus no
@@ -69,7 +69,7 @@ namespace NOLoftFix
     {
         private static void Postfix(ARHSeeker __instance)
         {
-            if (!Plugin.Ready) return;
+            if (!Plugin.Ready || __instance.missile == null || !__instance.missile.LocalSim) return;
             try
             {
                 // Must run whether or not the profile engaged: zeroing loftAmount
@@ -97,7 +97,8 @@ namespace NOLoftFix
     {
         private static void Postfix(ARHSeeker __instance)
         {
-            if (!Plugin.Ready || !Plugin.Settings.verbose) return;
+            if (!Plugin.Ready || !Plugin.Settings.verbose ||
+                __instance.missile == null || !__instance.missile.LocalSim) return;
             try
             {
                 var st = LoftGuidance.Get(__instance);

@@ -8,6 +8,8 @@ using BepInEx.Logging;
 
 using HarmonyLib;
 
+using NuclearOption.Networking;
+
 namespace NOLoftFix
 {
     /// <summary>
@@ -132,6 +134,7 @@ namespace NOLoftFix
 
         private FileSystemWatcher _cfgWatcher;
         private volatile bool _reloadPending;
+        private bool _moddedFlagSet;
 
         private void StartConfigWatch()
         {
@@ -157,6 +160,16 @@ namespace NOLoftFix
 
         private void Update()
         {
+            if (!_moddedFlagSet && Ready)
+            {
+                var networkManager = FindObjectOfType<NetworkManagerNuclearOption>();
+                if (networkManager != null)
+                {
+                    networkManager.SetModdedServer(true);
+                    _moddedFlagSet = true;
+                }
+            }
+
             if (!_reloadPending) return;
             _reloadPending = false;
 
