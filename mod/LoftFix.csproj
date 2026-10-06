@@ -7,8 +7,8 @@
     <AssemblyName>NOLoftFix</AssemblyName>
     <RootNamespace>NOLoftFix</RootNamespace>
     <Product>NOLoftFix</Product>
-    <Description>Reference-profile midcourse lofting for the AAM-29 Scythe (CEAS-GNC-2026-016 APG, expressed as aimpoint placement)</Description>
-    <Version>0.1.0</Version>
+    <Description>Lofting improvements</Description>
+    <Version>0.1.1</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <RestoreAdditionalProjectSources>
@@ -72,7 +72,7 @@
     </PropertyGroup>
     <Exec Command="rsync -rcv --mkpath &quot;$(OutputPath)$(AssemblyName).dll&quot; &quot;$(RootModFolder)/&quot;" />
     <Exec Command="rsync -rcv --delete --mkpath &quot;$(MSBuildProjectDirectory)/Tables/&quot; &quot;$(RootModFolder)/Tables/&quot;" />
-    <Exec Command="rsync -rcv --mkpath &quot;LICENSE&quot; &quot;$(MSBuildProjectDirectory)/&quot;" />
+    <Exec Command="rsync -rcv --mkpath &quot;LICENSE&quot; &quot;$(RootModFolder)/&quot;" />
     <Exec Command="7z a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on &quot;../$(AssemblyName)-$(Version).7z&quot; &quot;$(AssemblyName)&quot;" WorkingDirectory="$(StagingDir)" />
   </Target>
 

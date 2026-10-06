@@ -54,6 +54,7 @@ jobs:
               "$MANAGED/Assembly-CSharp.dll" \
               "$MANAGED/Mirage.dll" \
               "$MANAGED/Newtonsoft.Json.dll" \
+              build-output/NOLoftFix.dll \
               build-output/NOLoftFix-*.7z
 
       - name: Upload artifacts
