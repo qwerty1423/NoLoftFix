@@ -10,9 +10,7 @@ some files were omitted from the repo
 
 code quality may be low
 
-to use... compile it yourself I guess.
-
-The mod only patches code that runs if you are host, so you can join vanilla games with it if you want, it won't do anything. If you are the host, then the mod will change the lofting behaviour.
+The mod only patches code that runs if you are host, so you can safely join vanilla games with it if you want, as it will have no effect. If you are the host, then the mod will change the lofting behaviour, and vanilla clients should still be able to join your game.
 
 May improve scythe performance. The scythe will now hit targets up to around 250 km as long as they are easy targets such as AI helicopters, by lofting properly. AI fighters can be hit around half the time at around 90 km. Effectiveness against human targets is mostly unchanged thanks to ecm, mcm, and sea skimming. The scimitar's performance is mostly unchanged because of its drag nerfs, making lofting rather useless.
 
