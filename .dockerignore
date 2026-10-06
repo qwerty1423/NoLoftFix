@@ -1,0 +1,6 @@
+mod/bin/
+mod/obj/
+Local.props
+.git/
+build-output/
+*.7z

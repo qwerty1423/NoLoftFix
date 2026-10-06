@@ -18,8 +18,20 @@
     </RestoreAdditionalProjectSources>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS0649;CS0169</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugType>embedded</DebugType>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <Optimize>true</Optimize>
+    <PathMap>$(MSBuildProjectDirectory)=.</PathMap>
+    <EmbedAllSources>false</EmbedAllSources>
+    <EmbedUntrackedSources>false</EmbedUntrackedSources>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <Deterministic>true</Deterministic>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,7 +46,6 @@
     <TableFiles Include="Tables\*.json" />
   </ItemGroup>
 
-  <!-- Copy the DLL + Tables/ into the game's BepInEx/plugins folder on Debug builds. -->
   <PropertyGroup>
     <PluginDeployPath Condition="'$(NuclearOptionDir)' != '' and Exists('$(NuclearOptionDir)/BepInEx/plugins')">$(NuclearOptionDir)/BepInEx/plugins/$(AssemblyName)</PluginDeployPath>
   </PropertyGroup>
@@ -44,10 +55,6 @@
           Inputs="$(OutputPath)$(AssemblyName).dll;@(TableFiles)"
           Outputs="$(PluginDeployPath)/$(AssemblyName).dll">
     <Exec Command="rsync -rcv --mkpath &quot;$(OutputPath)$(AssemblyName).dll&quot; &quot;$(PluginDeployPath)/&quot;" />
-    <!-- Deliberately no delete flag here. mod/Tables holds only
-         loft_tables.example.json, while the real generated table lives in the
-         deployed Tables/ folder: it is user data, not a build artefact. Mirroring
-         with deletion would silently remove it on every build. -->
     <Exec Command="rsync -rcv --mkpath &quot;$(MSBuildProjectDirectory)/Tables/&quot; &quot;$(PluginDeployPath)/Tables/&quot;" />
   </Target>
 
@@ -57,16 +64,16 @@
   </Target>
 
   <Target Name="CreateZip" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'"
-          Inputs="$(OutputPath)$(AssemblyName).dll;README.md;@(TableFiles)"
-          Outputs="$(OutputPath)../$(AssemblyName)-$(Version).zip">
+          Inputs="$(OutputPath)$(AssemblyName).dll;LICENSE;@(TableFiles)"
+          Outputs="$(OutputPath)../$(AssemblyName)-$(Version).7z">
     <PropertyGroup>
       <StagingDir>$(OutputPath)Staging</StagingDir>
       <RootModFolder>$(StagingDir)/$(AssemblyName)</RootModFolder>
     </PropertyGroup>
     <Exec Command="rsync -rcv --mkpath &quot;$(OutputPath)$(AssemblyName).dll&quot; &quot;$(RootModFolder)/&quot;" />
     <Exec Command="rsync -rcv --delete --mkpath &quot;$(MSBuildProjectDirectory)/Tables/&quot; &quot;$(RootModFolder)/Tables/&quot;" />
-    <Exec Command="rsync -rcv --mkpath &quot;README.md&quot; &quot;$(RootModFolder)/&quot;" />
-    <Exec Command="cd &quot;$(StagingDir)&quot; &amp;&amp; zip -qr &quot;../$(AssemblyName)-$(Version).zip&quot; &quot;$(AssemblyName)&quot;" />
+    <Exec Command="rsync -rcv --mkpath &quot;LICENSE&quot; &quot;$(MSBuildProjectDirectory)/&quot;" />
+    <Exec Command="7z a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on &quot;../$(AssemblyName)-$(Version).7z&quot; &quot;$(AssemblyName)&quot;" WorkingDirectory="$(StagingDir)" />
   </Target>
 
 </Project>
