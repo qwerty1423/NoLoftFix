@@ -217,6 +217,7 @@ It is carried through to the table so the runtime can index on it, and so you ca
 generate separate profiles per closing geometry later if you want.
 """
 from __future__ import annotations
+from pathlib import Path
 
 import argparse
 import itertools
@@ -287,7 +288,8 @@ def _worker_setup(user_initializer, user_initargs):
     def _term(_signum, _frame):
         _bye()
 
-    signal.signal(signal.SIGINT, signal.SIG_IGN)   # the parent stops us, see below
+    # the parent stops us, see below
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     signal.signal(signal.SIGTERM, _term)
     parent = os.getppid()
 
@@ -414,7 +416,8 @@ def _stop_workers():
 
     # Killing a worker makes the executor's manager thread report it as
     # "unexpectedly terminated", which reads like a crash and is not one.
-    logging.getLogger("concurrent.futures.process").setLevel(logging.CRITICAL + 1)
+    logging.getLogger("concurrent.futures.process").setLevel(
+        logging.CRITICAL + 1)
     procs = [p for ex in list(_POOLS)
              for p in list(getattr(ex, "_processes", {}).values())]
     for p in procs:
@@ -467,12 +470,14 @@ def _stop_now(signum, _frame):
     sys.stdout.flush()
     try:
         n = _stop_workers()
-        print(f"  {n} worker process(es) terminated." if n else "  no workers to stop.")
+        print(
+            f"  {n} worker process(es) terminated." if n else "  no workers to stop.")
         print("  Finished cells are on disk; re-run the same command to resume.")
         sys.stdout.flush()
     except Exception:                              # noqa: BLE001 - leaving anyway
         pass
     _leave(128 + signum)
+
 
 def _lingering_manager_threads(timeout: float = 2.0,
                                out=sys.stderr) -> list[str]:
@@ -538,8 +543,6 @@ def _leave(rc: int = 0) -> None:
         pass
     os._exit(rc)
 
-
-from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
@@ -821,7 +824,8 @@ def turning_points(cell, n: int = 2001) -> int:
     more is the profile going up, down, up, down -- the shape the eye calls
     woven. Read off poly_a, so it works on a shipped table as well as a run.
     """
-    a = [float(v) for v in (cell.get("poly_a") or []) if isinstance(v, (int, float))]
+    a = [float(v) for v in (cell.get("poly_a") or [])
+         if isinstance(v, (int, float))]
     if len(a) < 2:
         return 0
     turns = 0
@@ -925,8 +929,10 @@ def reintegrate(cell: dict, curves: dict, steps: int = 4000) -> dict | None:
         k1 = deriv(st, t, a_of(t))
         k2 = deriv([st[q] + 0.5 * dt * k1[q] for q in range(5)], tm, a_of(tm))
         k3 = deriv([st[q] + 0.5 * dt * k2[q] for q in range(5)], tm, a_of(tm))
-        k4 = deriv([st[q] + dt * k3[q] for q in range(5)], t + dt, a_of(t + dt))
-        st = [st[q] + dt / 6.0 * (k1[q] + 2 * k2[q] + 2 * k3[q] + k4[q]) for q in range(5)]
+        k4 = deriv([st[q] + dt * k3[q]
+                   for q in range(5)], t + dt, a_of(t + dt))
+        st = [st[q] + dt / 6.0 *
+              (k1[q] + 2 * k2[q] + 2 * k3[q] + k4[q]) for q in range(5)]
         while j + 1 < len(t_s) and t_s[j + 1] <= (i + 1) * dt:
             j += 1
             dV_max = max(dV_max, abs(st[2] - vs[j]))
@@ -979,7 +985,6 @@ def cell_health(cell: dict, curves, max_weaves: int = 2,
             {"turns": turns, "source": "none"})
 
 
-
 def infeasible_reason(d: dict) -> str:
     """One line explaining an infeasible verdict, whichever kind it is.
 
@@ -1018,7 +1023,7 @@ def infeasible_reason(d: dict) -> str:
 
 
 def rank_of(cell: dict, how: str, max_rmse: float = 1500.0,
-           health: str | None = None) -> float:
+            health: str | None = None) -> float:
     """Sort key for 'which attempt wins'. Higher is better.
 
     Three tiers, and this is the ONE place a fit threshold belongs:
@@ -1072,7 +1077,8 @@ def rank_of(cell: dict, how: str, max_rmse: float = 1500.0,
 # The numbers a cell carries that the record for it repeats at the top level.
 # --status and the "how many converged" count read those, not the cell, and a
 # record built out of a log line can be carrying an attempt's numbers.
-RECORD_FIELDS = ("terminal_speed_ms", "fit_rmse_m", "converged", "tof_s", "maxiter")
+RECORD_FIELDS = ("terminal_speed_ms", "fit_rmse_m",
+                 "converged", "tof_s", "maxiter")
 
 
 def _decorate(rec: dict, cell: dict) -> dict:
@@ -1210,7 +1216,6 @@ class Store:
             fh.flush()
             os.fsync(fh.fileno())
 
-
     def prune(self, key: str) -> tuple[int, int]:
         """Delete every attempt file for `key`. Returns (files, bytes) removed.
 
@@ -1247,7 +1252,8 @@ class Store:
 
         Returns {"lines_before", "lines_after", "bytes_before", "bytes_after"}.
         """
-        out = {"lines_before": 0, "lines_after": 0, "bytes_before": 0, "bytes_after": 0}
+        out = {"lines_before": 0, "lines_after": 0,
+               "bytes_before": 0, "bytes_after": 0}
         if not self.state.exists():
             return out
         out["bytes_before"] = self.state.stat().st_size
@@ -1296,9 +1302,11 @@ def pick_best(cells_dir: Path, key: str, how: str = "best",
     if how == "first" or how not in BEST_OF:
         return current, 0
     # `flyable` needs a verdict per candidate; anything else does not pay for it
-    health = health_of if (how == "flyable" and health_of is not None) else (lambda c: None)
+    health = health_of if (
+        how == "flyable" and health_of is not None) else (lambda c: None)
     best = current
-    best_rank = rank_of(current, how, max_rmse, health(current)) if current else -1e9
+    best_rank = rank_of(current, how, max_rmse,
+                        health(current)) if current else -1e9
     best_n = 0
     for n in list_attempts(cells_dir, key):
         p = attempt_path(cells_dir, key, n)
@@ -1431,7 +1439,8 @@ def _solve_one(key, geom, coeffs_path, nodes, order, guess, auth=3.0, dive=30.0,
         # the optimiser last believed.
         cell["_settings"].update(opts)
         cell["feasible"] = bool(sol.get("feasible", True))
-        cell["violation"] = None if cell["feasible"] else str(sol.get("msg", ""))
+        cell["violation"] = None if cell["feasible"] else str(
+            sol.get("msg", ""))
         cell["authority_floor_g"] = float(sol.get("authority_floor", 0.0))
         cell["speed_floor_ms"] = float(sol.get("speed_floor", 0.0))
         # What the trajectory actually did, floor or no floor: these are the
@@ -1585,7 +1594,8 @@ def seed_from_cell(cell: dict, coeffs_path=None, n: int = 24):
 
     Returns None if the cell has no usable polynomial.
     """
-    a = [float(v) for v in (cell.get("poly_a") or []) if isinstance(v, (int, float))]
+    a = [float(v) for v in (cell.get("poly_a") or [])
+         if isinstance(v, (int, float))]
     if len(a) < 2:
         return None
     try:
@@ -1605,7 +1615,8 @@ def seed_from_cell(cell: dict, coeffs_path=None, n: int = 24):
     gamma = [math.atan2(_poly_slope(a, x), max(Xf, 1.0)) for x in xi]
     V = [max(50.0, V0 + (Vt - V0) * x) for x in xi]
 
-    _dry, pts = _mass_profile(coeffs_path, tof, n) if coeffs_path else (None, None)
+    _dry, pts = _mass_profile(
+        coeffs_path, tof, n) if coeffs_path else (None, None)
     if pts:
         mass = []
         for x in xi:
@@ -1618,7 +1629,8 @@ def seed_from_cell(cell: dict, coeffs_path=None, n: int = 24):
                     break
             mass.append(m)
     else:
-        mass = [max(V0, 1.0)] * n          # unused fallback; mass is nearly free
+        # unused fallback; mass is nearly free
+        mass = [max(V0, 1.0)] * n
 
     return {"t": [x * tof for x in xi], "x": [x * Xf for x in xi], "h": h,
             "V": V, "gamma": gamma, "mass": mass, "alpha": [0.0] * n,
@@ -1658,7 +1670,8 @@ def _reopt_entry(job):
                          auth, dive, maxiter, store_sol, opts)
         # the attempt NUMBER is assigned by the caller: (key, rec) in order is
         # enough, and it keeps numbering monotone across invocations
-        rec.pop("_sol", None)          # stripped: the parent owns what lands on disk
+        # stripped: the parent owns what lands on disk
+        rec.pop("_sol", None)
         out.append((key, rec))
         # Everything after the first attempt is COLD. Warming attempt N+1 from
         # attempt N would make the attempts a hill climb instead of a fresh draw,
@@ -1814,7 +1827,8 @@ def fails_filter(cell: dict, a, curves=None) -> str | None:
         if turns > a.max_weaves:
             return f"{turns} turning points > {a.max_weaves} (woven profile)"
     if getattr(a, "infeasible", False) and curves is not None:
-        verdict, detail = cell_health(cell, curves, a.max_weaves or 2, a.speed_tol)
+        verdict, detail = cell_health(
+            cell, curves, a.max_weaves or 2, a.speed_tol)
         if verdict == "infeasible":
             return infeasible_reason(detail)
     return None
@@ -1883,7 +1897,8 @@ def cmd_reopt(g, a):
           f"{a.reopt_runs} attempt(s) each, best-of={a.best_of}")
     reasons: dict = {}
     for _k, _gm, why in todo:
-        reasons[why.split("(")[0].strip()] = reasons.get(why.split("(")[0].strip(), 0) + 1
+        reasons[why.split("(")[0].strip()] = reasons.get(
+            why.split("(")[0].strip(), 0) + 1
     for why, n in sorted(reasons.items(), key=lambda kv: -kv[1]):
         print(f"    {n:4d}  {why}")
     if not todo:
@@ -1953,7 +1968,8 @@ def cmd_reopt(g, a):
                 print(f"{key}  WORKER CRASHED: {type(e).__name__}: {e}")
                 results = []
             before = done.get(key, {}).get("cell")
-            before_v = float(before["terminal_speed_ms"]) if before else float("nan")
+            before_v = float(before["terminal_speed_ms"]
+                             ) if before else float("nan")
             written = []
             for (k, rec) in results:
                 attempt = next_slot.get(k, 1)
@@ -2073,7 +2089,8 @@ def _repick(g, a, store, done, keys=None, curves=None, quiet=False) -> int:
             # The caller's index is stale for this key now, and --merge builds the
             # table out of exactly that index: keep them the same object, numbers
             # and all.
-            rec = done.setdefault(key, {"key": key, "ok": True, "elapsed_s": 0.0})
+            rec = done.setdefault(
+                key, {"key": key, "ok": True, "elapsed_s": 0.0})
             _decorate(rec, win)
             rec["ok"] = True
             if after != before:
@@ -2124,7 +2141,8 @@ def cmd_check(g, a, store=None, done=None) -> int:
         store = store or Store(a.runs / g["name"])
         done = done if done is not None else store.index()
         warn_rejected(store)
-        rows = [(k, r.get("cell")) for k, r in sorted(done.items()) if r.get("cell")]
+        rows = [(k, r.get("cell"))
+                for k, r in sorted(done.items()) if r.get("cell")]
 
     bad = woven = ok = 0
     for key, cell in rows:
@@ -2142,8 +2160,10 @@ def cmd_check(g, a, store=None, done=None) -> int:
     # The minima are facts about the trajectories, not verdicts: they are reported
     # whether or not the run asked for a floor, which is what makes them usable
     # for choosing one.
-    vmin = [c.get("v_min_ms") for _, c in rows if c.get("v_min_ms") is not None]
-    nmin = [c.get("nav_min_g") for _, c in rows if c.get("nav_min_g") is not None]
+    vmin = [c.get("v_min_ms")
+            for _, c in rows if c.get("v_min_ms") is not None]
+    nmin = [c.get("nav_min_g")
+            for _, c in rows if c.get("nav_min_g") is not None]
     if vmin or nmin:
         print(f"  measured, no floor implied:"
               + (f" lowest speed {min(vmin):.0f} m/s" if vmin else "")
@@ -2171,8 +2191,6 @@ def cmd_compact_state(g, a, store=None):
         print(f"{g['name']}: state.jsonl compacted, {c['lines_before']} -> "
               f"{c['lines_after']} record(s), {c['bytes_before'] / 1024:.0f} -> "
               f"{c['bytes_after'] / 1024:.0f} KB. Nothing was solved.")
-
-
 
 
 def cmd_prune(g, a, store=None, done=None):
@@ -2262,7 +2280,8 @@ def cmd_status(g, a):
             rem = total - len(ok) - (0 if a.retry_failed else len(failed))
             print(f"  mean {sum(el)/len(el):.1f} s/cell -> "
                   f"~{rem*sum(el)/len(el)/max(a.jobs, 1)/60:.0f} min left at {a.jobs} jobs")
-    with_attempts = [k for k, r in done.items() if len(r.get("attempts", [])) > 0]
+    with_attempts = [k for k, r in done.items() if len(
+        r.get("attempts", [])) > 0]
     if with_attempts:
         extra = sum(len(r.get("attempts", [])) for r in done.values())
         print(f"  {len(with_attempts)} cells have re-optimise attempts on disk "
@@ -2280,7 +2299,8 @@ def cmd_status(g, a):
     onbound = [k for k, r in ok.items()
                if (r.get("cell") or {}).get("t_bound")]
     if onbound:
-        shown = ", ".join(sorted(onbound)[:3]) + (" ..." if len(onbound) > 3 else "")
+        shown = ", ".join(sorted(onbound)[:3]) + \
+            (" ..." if len(onbound) > 3 else "")
         print(f"  {len(onbound)} cell(s) finished with the flight time ON a duration "
               f"bound ({shown}): the duration is the box's answer, not the "
               f"optimiser's -- see t_bound/duration_bounds_s in the cell")
@@ -2352,7 +2372,8 @@ def cmd_envelope(g, a):
                         "target_alt_m": key[2]})
             out[name] = rec
             if rec.get("ok"):
-                note = "" if rec["feasible"] else "  INFEASIBLE: " + str(rec["violation"])[:70]
+                note = "" if rec["feasible"] else "  INFEASIBLE: " + \
+                    str(rec["violation"])[:70]
                 print(f"  {name:>20s}  max range {rec['max_range_km']:7.1f} km  "
                       f"V {rec['terminal_speed_ms']:6.1f} m/s  {rec['elapsed_s']:5.1f}s{note}")
             else:
@@ -2402,7 +2423,8 @@ def cmd_merge(g, a):
                                 f"_{c['target_alt_m']:.0f}")
             if rec and rec.get("ok"):
                 c["exp_max_range_km"] = round(float(rec["max_range_km"]), 1)
-                c["reachable"] = bool(float(c["range_km"]) <= float(rec["max_range_km"]))
+                c["reachable"] = bool(
+                    float(c["range_km"]) <= float(rec["max_range_km"]))
                 n_unreach += 0 if c["reachable"] else 1
     cells.sort(key=lambda c: (c["range_km"], c["launch_alt_m"], c["launch_speed_ms"],
                               c["target_alt_m"], c["target_speed_ms"]))
@@ -2436,7 +2458,7 @@ def main():
     ap.add_argument("--limit", type=int, default=0,
                     help="run at most N cells (smoke test)")
     ap.add_argument("--timeout", type=float, default=900.0)
-    ap.add_argument("--max-tasks", type=int, default=8,
+    ap.add_argument("--max-tasks", type=int, default=10000,
                     help="restart each worker after this many cells (OpenMDAO leaks)")
     ap.add_argument("--store-solutions", dest="store_solutions", action="store_true",
                     default=None,
@@ -2500,7 +2522,8 @@ def main():
                     help="with --reoptimise, re-solve every cell. This is already "
                          "what a bare --reoptimise does; it is here because it reads "
                          "well.")
-    ap.add_argument("--all", dest="all_cells", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--all", dest="all_cells",
+                    action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--reopt-runs", type=int, default=1, metavar="N",
                     help="attempts per cell per invocation (default 1). Attempt 1 is "
                          "warm-started from the current solution and is a floor; the "
