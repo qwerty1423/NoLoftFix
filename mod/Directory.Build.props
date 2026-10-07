@@ -1,6 +1,4 @@
 <Project>
-  <!-- Locates the game's Managed dir so the plugin can compile against
-       Assembly-CSharp. Override with -p:ManagedDir=/path/to/Managed. -->
   <PropertyGroup>
     <NuclearOptionDir Condition="'$(NuclearOptionDir)' == ''">$(HOME)/.local/share/Steam/steamapps/common/Nuclear Option</NuclearOptionDir>
 
@@ -14,17 +12,12 @@
   </Target>
 
   <ItemGroup>
-    <!-- Publicize=true is what lets the patch code touch ARHSeeker.loftAmount,
-         .knownPos and .targetDist, all of which are private in the game. -->
     <Reference Include="Assembly-CSharp">
       <HintPath>$(ManagedDir)/Assembly-CSharp.dll</HintPath>
       <Private>false</Private>
       <Publicize>true</Publicize>
       <ExternallyResolved>true</ExternallyResolved>
     </Reference>
-    <!-- Present in the game's Managed folder. Used instead of UnityEngine.JsonUtility
-         for the loft tables: JsonUtility silently IGNORES fields whose type it does
-         not support, which produced "0 cells, skipped" with no error at all. -->
     <Reference Include="Newtonsoft.Json">
       <HintPath>$(ManagedDir)/Newtonsoft.Json.dll</HintPath>
       <Private>false</Private>

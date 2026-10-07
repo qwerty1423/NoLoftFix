@@ -8,7 +8,7 @@
     <RootNamespace>NOLoftFix</RootNamespace>
     <Product>NOLoftFix</Product>
     <Description>Lofting improvements</Description>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <RestoreAdditionalProjectSources>

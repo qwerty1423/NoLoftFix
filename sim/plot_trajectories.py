@@ -128,7 +128,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-AXES = ["range_km", "launch_alt_m", "launch_speed_ms", "target_alt_m", "target_speed_ms"]
+AXES = ["range_km", "launch_alt_m", "launch_speed_ms",
+        "target_alt_m", "target_speed_ms"]
 
 # Axis order == "which is worth seeing vary first". Used to choose rows/cols/sweep
 # when the user has not said, and to lay out the overview.
@@ -354,8 +355,11 @@ class Cell:
 
     @property
     def flat(self) -> bool:
-        """Never lofted: apex is the launch altitude. The table's silent failure."""
-        return abs(self.apex_gain) < 1.0
+        # """Never lofted: apex is the launch altitude."""
+        # return abs(self.apex_gain) < 1.0
+
+        # unnecessary.
+        return False
 
     def alt(self, xi):
         """h(xi), Horner. Matches LoftCell.AltitudeAt so a plot cannot disagree
@@ -549,7 +553,8 @@ def load_runs(root: Path, include_attempts: bool = False) -> tuple[list[Cell], l
             skipped += 1
             continue
         if ATTEMPT_RE.search(p.stem):
-            c.meta.setdefault("_note", "attempt " + ATTEMPT_RE.search(p.stem).group()[8:])
+            c.meta.setdefault("_note", "attempt " +
+                              ATTEMPT_RE.search(p.stem).group()[8:])
         elif c.meta.get("_attempts", 1) > 1:
             c.meta.setdefault("_note", f"best of {c.meta['_attempts']}")
         cells.append(c)
@@ -625,14 +630,17 @@ def select(cells: list[Cell], args) -> list[Cell]:
             drop("no envelope verdict" if c.reachable is None else "within envelope")
             continue
         if args.min_v_along is not None and not (c.v_min >= args.min_v_along):
-            drop("no v_min recorded" if c.v_min != c.v_min else "v_min below the floor")
+            drop("no v_min recorded" if c.v_min !=
+                 c.v_min else "v_min below the floor")
             continue
         if args.max_defect is not None and not (c.defect <= args.max_defect):
-            drop("no defect ratio" if c.defect != c.defect else "defect above the limit")
+            drop("no defect ratio" if c.defect !=
+                 c.defect else "defect above the limit")
             continue
         out.append(c)
     for why, n in sorted(dropped.items()):
-        print(f"NOTE: {n} cell(s) dropped by a filter: {why}.", file=sys.stderr)
+        print(f"NOTE: {n} cell(s) dropped by a filter: {why}.",
+              file=sys.stderr)
     return out
 
 
@@ -777,7 +785,7 @@ PALETTES = {
     "auto": None,
     "tab10": "tab10",
     "okabe-ito": ["#0072B2", "#E69F00", "#009E73", "#D55E00",
-                   "#CC79A7", "#56B4E9", "#F0E442", "#333333"],
+                  "#CC79A7", "#56B4E9", "#F0E442", "#333333"],
     "viridis": "viridis",
     "cividis": "cividis",
 }
@@ -801,7 +809,8 @@ def colour_for(i: int, n: int, plt, palette: str = "auto"):
 def plot_family(cells: list[Cell], args, plt, desc: str):
     """Altitude vs downrange, one panel per (rows x cols), one line per sweep."""
     if not cells:
-        raise SystemExit("nothing to plot: no cells matched. Loosen --fix / --min-* .")
+        raise SystemExit(
+            "nothing to plot: no cells matched. Loosen --fix / --min-* .")
 
     free = free_axes(cells)
     fixed = {a: values_of(cells, a)[0] for a in ORDER if a not in free}
@@ -897,9 +906,11 @@ def plot_family(cells: list[Cell], args, plt, desc: str):
                 continue
 
             sweep_vals = values_of(sub, sweep_axis) if sweep_axis else [None]
-            labels = []            # [(xs, ys, text, colour)] -- placed after the axes settle
+            # [(xs, ys, text, colour)] -- placed after the axes settle
+            labels = []
             for si, sv in enumerate(sweep_vals):
-                sel = [c for c in sub if sv is None or matches(c.coord(sweep_axis), sv, args.fix_tol)]
+                sel = [c for c in sub if sv is None or matches(
+                    c.coord(sweep_axis), sv, args.fix_tol)]
                 if not sel:
                     continue
                 c = sel[0]
@@ -910,7 +921,8 @@ def plot_family(cells: list[Cell], args, plt, desc: str):
                 ls = STATUS_LINE[c.status]
                 if c.flat:
                     ls = (0, (4, 1.6, 1, 1.6))
-                col = colour_for(si, len(sweep_vals), plt, args.palette) if sweep_axis else "C0"
+                col = colour_for(si, len(sweep_vals), plt,
+                                 args.palette) if sweep_axis else "C0"
                 xi, h = c.alt_curve()
                 if args.normalised:
                     xs, ys = xi * 100.0, h / 1000.0
@@ -921,7 +933,8 @@ def plot_family(cells: list[Cell], args, plt, desc: str):
                 legend_handles.setdefault(ln.get_label(), ln)
                 # One marker at the arrival end, shaped by the verdict. Hollow means
                 # the cell is beyond the solved envelope or carries no verdict.
-                mfc = "none" if (c.beyond_envelope or c.status in ("unverified", "unknown")) else col
+                mfc = "none" if (c.beyond_envelope or c.status in (
+                    "unverified", "unknown")) else col
                 ax.plot([xs[-1]], [ys[-1]], marker=STATUS_MARKER[c.status], ms=3.6,
                         color=col, markerfacecolor=mfc, markeredgewidth=0.9,
                         linestyle="none")
@@ -953,7 +966,8 @@ def plot_family(cells: list[Cell], args, plt, desc: str):
                         fontsize=8, va="top",
                         bbox=dict(fc="white", ec="0.8", alpha=0.8, pad=1.5))
             ax.margins(x=0.04)
-            ax.set_xlabel("range along launch axis (%)" if args.normalised else "downrange (km)")
+            ax.set_xlabel(
+                "range along launch axis (%)" if args.normalised else "downrange (km)")
             ax.set_ylabel("altitude (km)")
     # Decode the encodings in the legend, once, for the whole figure: which line
     # style is which verdict, and what a hollow marker means.
@@ -998,11 +1012,14 @@ def overview_panels(cells: list[Cell]) -> list[tuple[str, list, bool]]:
     cands = [
         ("apex gain (m)", [c.apex_gain for c in cells], False, True),
         ("terminal speed (m/s)", [c.v_term for c in cells], False, True),
-        ("lowest speed along the path (m/s)", [c.v_min for c in cells], False, False),
-        ("lowest available load factor (g)", [c.nav_min for c in cells], True, False),
+        ("lowest speed along the path (m/s)",
+         [c.v_min for c in cells], False, False),
+        ("lowest available load factor (g)", [
+         c.nav_min for c in cells], True, False),
         ("fit RMSE (m)", [c.rmse for c in cells], True, True),
         ("time of flight (s)", [c.tof for c in cells], False, True),
-        ("recorded / re-integrated speed", [c.defect for c in cells], False, False),
+        ("recorded / re-integrated speed",
+         [c.defect for c in cells], False, False),
     ]
     import numpy as np
     out = []
@@ -1051,7 +1068,8 @@ def plot_overview(cells: list[Cell], args, plt, desc: str):
         okrange = np.isfinite(y)
         for status, marker, s in (("infeasible", "x", 34), ("woven", "^", 26),
                                   ("unverified", "o", 16), ("unknown", "o", 16)):
-            m = np.array([c.status == status for c in cells]) & okrange & ~unreach
+            m = np.array([c.status == status for c in cells]
+                         ) & okrange & ~unreach
             if not np.any(m):
                 continue
             if status in ("infeasible", "woven"):
@@ -1078,7 +1096,8 @@ def plot_overview(cells: list[Cell], args, plt, desc: str):
     # Colour bar on the last panel of the first row: the mapping is the same for
     # every panel, so repeating it per panel would be six identical bars.
     if sc is not None:
-        fig.colorbar(sc, ax=axlist, label=LABEL[colour_axis], pad=0.015, fraction=0.02)
+        fig.colorbar(
+            sc, ax=axlist, label=LABEL[colour_axis], pad=0.015, fraction=0.02)
 
     # Reference lines and thresholds, per panel that has one.
     by_name = {name: ax for (name, _v, _l), ax in zip(panels, axlist)}
@@ -1094,7 +1113,8 @@ def plot_overview(cells: list[Cell], args, plt, desc: str):
     ax = by_name.get("lowest speed along the path (m/s)")
     if ax is not None:
         ax.axhline(SELF_DESTRUCT_SPEED, color="crimson", lw=0.9, ls=":")
-        floors = [c.speed_floor for c in cells if c.speed_floor == c.speed_floor and c.speed_floor > 0]
+        floors = [c.speed_floor for c in cells if c.speed_floor ==
+                  c.speed_floor and c.speed_floor > 0]
         if floors:
             ax.axhline(max(floors), color="0.4", lw=0.9, ls="--")
             ax.text(0.99, 0.02, f"dashed {max(floors):.0f} m/s = the floor these cells were "
@@ -1130,7 +1150,8 @@ def plot_overview(cells: list[Cell], args, plt, desc: str):
             handles = ax.get_legend_handles_labels()
             break
     if handles[0]:
-        axlist[0].legend(*handles, loc="upper left", fontsize=7, framealpha=0.9)
+        axlist[0].legend(*handles, loc="upper left",
+                         fontsize=7, framealpha=0.9)
     return fig
 
 
@@ -1152,7 +1173,8 @@ def plot_detail(cells: list[Cell], args, plt, desc: str):
 
     xi, h = c.alt_curve()
     ax = axlist[0]
-    ax.plot(xi * c.xf / 1000.0, h / 1000.0, color="C0", lw=2, label="planned (poly_a)")
+    ax.plot(xi * c.xf / 1000.0, h / 1000.0,
+            color="C0", lw=2, label="planned (poly_a)")
     if has_sol:
         xs = np.asarray(sol_series(c.sol, "x") or [], dtype=float)
         hs = np.asarray(sol_series(c.sol, "h") or [], dtype=float)
@@ -1182,16 +1204,17 @@ def plot_detail(cells: list[Cell], args, plt, desc: str):
     verdict = {"infeasible": "INFEASIBLE", "woven": "woven profile",
                "unknown": "no verdict recorded"}.get(c.status, "")
     if verdict:
-        facts.append(f"--check: {verdict}" + (f" -- {c.violation}" if c.violation else ""))
+        facts.append(f"--check: {verdict}" +
+                     (f" -- {c.violation}" if c.violation else ""))
     if c.flat:
-        facts.append("never lofted (apex == launch altitude)")
+        facts.append("apex == launch altitude")
     if c.beyond_envelope:
         facts.append(f"beyond the solved envelope ({c.exp_max_range:.0f} km)")
     if c.t_bound:
         facts.append(f"flight time ends on its {c.t_bound} duration bound")
     if c.feasible is not None:
         facts.append("constraint audit: " + ("satisfied" if c.feasible
-                                              else f"VIOLATED -- {c.violation or 'see the cell'}"))
+                                             else f"VIOLATED -- {c.violation or 'see the cell'}"))
     if c.defect == c.defect:
         facts.append(f"recorded / re-integrated speed: {c.defect:.2f}"
                      + ("  (over the 1.25 tolerance)" if c.defect > 1.0 + DEFAULT_SPEED_TOL else ""))
@@ -1214,7 +1237,8 @@ def plot_detail(cells: list[Cell], args, plt, desc: str):
         # poly - solution, at the solution nodes. `h` is the dense 200-point
         # curve and must not be used here: the arrays are different lengths and
         # the residual is only defined where the solver actually evaluated.
-        poly_at_nodes = np.array([c.alt(x / c.xf) if c.xf > 0 else 0.0 for x in xs])
+        poly_at_nodes = np.array(
+            [c.alt(x / c.xf) if c.xf > 0 else 0.0 for x in xs])
         res = poly_at_nodes - hs
         ax = axlist[1]
         ax.plot(xs / 1000.0, res, color="crimson", lw=1.4)
@@ -1259,7 +1283,8 @@ def plot_detail(cells: list[Cell], args, plt, desc: str):
                     xv = 0.5 * (xs[:-1] + xs[1:])
                 else:
                     continue
-                ax.plot(xv / 1000.0, np.degrees(y), color=col, lw=1.5, label=nm)
+                ax.plot(xv / 1000.0, np.degrees(y),
+                        color=col, lw=1.5, label=nm)
             ax.axhline(0.0, color="0.6", lw=0.8)
             ax.set_xlabel("downrange (km)")
             ax.set_ylabel("deg")
@@ -1272,7 +1297,8 @@ def plot_detail(cells: list[Cell], args, plt, desc: str):
 # flight logs
 # --------------------------------------------------------------------------
 FLIGHT_RE = re.compile(r"(M\d+)\s+\[flight\]\s+(.*)$")
-KV_RE = re.compile(r"([A-Za-z_][A-Za-z_0-9]*)=(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)")
+KV_RE = re.compile(
+    r"([A-Za-z_][A-Za-z_0-9]*)=(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)")
 
 
 def parse_flight_log(path: Path) -> dict:
@@ -1328,12 +1354,14 @@ def plot_flight(logs: list[Path], args, plt):
     carries it and it is where a tracking problem shows up as the command running
     away from the achieved value rather than as an altitude error.
     """
-    fig, axes = plt.subplots(4, 1, figsize=(10, 11.5), sharex=False, layout="constrained")
+    fig, axes = plt.subplots(4, 1, figsize=(
+        10, 11.5), sharex=False, layout="constrained")
     shown = 0
     for path in logs:
         rounds = parse_flight_log(path)
         if not rounds:
-            print(f"{path}: no [flight] lines (is this a BepInEx log?)", file=sys.stderr)
+            print(
+                f"{path}: no [flight] lines (is this a BepInEx log?)", file=sys.stderr)
             continue
         for rid, d in sorted(rounds.items()):
             if len(d.get("t", [])) < 3:
@@ -1343,7 +1371,8 @@ def plot_flight(logs: list[Path], args, plt):
             # xf is logged in km and s is the fraction of it: s*xf is km downrange
             x = [si * xi for si, xi in zip(d.get("s", []), d.get("xf", []))]
             ax = axes[0]
-            ax.plot(x, [v / 1000.0 for v in d.get("alt", [])], lw=1.4, label=lab)
+            ax.plot(x, [v / 1000.0 for v in d.get("alt", [])],
+                    lw=1.4, label=lab)
             if "ref" in d:
                 ax.plot(x, [v / 1000.0 for v in d["ref"]], lw=1.1, ls="--",
                         color=ax.lines[-1].get_color(), alpha=0.9)
@@ -1356,9 +1385,11 @@ def plot_flight(logs: list[Path], args, plt):
                                  color=axes[2].lines[-1].get_color(), alpha=0.9)
             axes[3].plot(*_paired(d, "t", "v"), lw=1.3, label=lab)
     if not shown:
-        raise SystemExit(f"no usable [flight] data in {', '.join(str(p) for p in logs)}")
+        raise SystemExit(
+            f"no usable [flight] data in {', '.join(str(p) for p in logs)}")
     axes[0].set_ylabel("altitude (km)")
-    axes[0].set_title("solid = missile, dashed = the reference it was commanded to follow")
+    axes[0].set_title(
+        "solid = missile, dashed = the reference it was commanded to follow")
     axes[1].axhline(0.0, color="0.6", lw=0.8)
     axes[1].set_ylabel("tracking error (m)")
     axes[1].set_xlabel("s (fraction of Xf)")
@@ -1373,7 +1404,8 @@ def plot_flight(logs: list[Path], args, plt):
         ax.legend(loc="best", fontsize=7)
         ax.margins(x=0.02)
     axes[0].set_xlabel("downrange (km)")
-    fig.suptitle("flight logs -- " + ", ".join(p.name for p in logs), fontsize=11)
+    fig.suptitle("flight logs -- " +
+                 ", ".join(p.name for p in logs), fontsize=11)
     return fig
 
 
@@ -1411,7 +1443,8 @@ def cmd_list(cells: list[Cell], args):
               f"{num(c.v_min, '6.0f'):>6} {num(c.nav_min, '6.2f'):>6} "
               f"{num(c.defect, '6.2f'):>6} {reach:>5} {c.t_bound or '-':>5}  {c.flags()}")
     print(f"\n{summary(cells)}")
-    slow = sum(1 for c in rows if c.v_term == c.v_term and c.v_term < DEFAULT_MIN_TERMINAL)
+    slow = sum(1 for c in rows if c.v_term ==
+               c.v_term and c.v_term < DEFAULT_MIN_TERMINAL)
     if slow:
         print(f"{slow} cell(s) arrive below the mod's {DEFAULT_MIN_TERMINAL:.0f} m/s "
               f"load-time filter")
@@ -1502,16 +1535,23 @@ def cells_json(cells: list[Cell], with_curves: bool = False) -> str:
     keys = [("key", lambda c: c.key), ("source", lambda c: c.source),
             ("short", lambda c: c.short()), ("status", lambda c: c.status),
             ("health", lambda c: c.health), ("feasible", lambda c: c.feasible),
-            ("violation", lambda c: c.violation), ("defect", lambda c: _json_safe(c.defect)),
-            ("v_min", lambda c: _json_safe(c.v_min)), ("nav_min", lambda c: _json_safe(c.nav_min)),
+            ("violation", lambda c: c.violation), ("defect",
+                                                   lambda c: _json_safe(c.defect)),
+            ("v_min", lambda c: _json_safe(c.v_min)
+             ), ("nav_min", lambda c: _json_safe(c.nav_min)),
             ("authority_floor", lambda c: _json_safe(c.authority_floor)),
-            ("speed_floor", lambda c: _json_safe(c.speed_floor)), ("t_bound", lambda c: c.t_bound),
-            ("apex", lambda c: _json_safe(c.apex)), ("apex_gain", lambda c: _json_safe(c.apex_gain)),
+            ("speed_floor", lambda c: _json_safe(c.speed_floor)
+             ), ("t_bound", lambda c: c.t_bound),
+            ("apex", lambda c: _json_safe(c.apex)
+             ), ("apex_gain", lambda c: _json_safe(c.apex_gain)),
             ("apex_downrange_km",
              lambda c: _json_safe(c.meta.get("apex_downrange_m", float("nan")) / 1000.0)),
-            ("v_term", lambda c: _json_safe(c.v_term)), ("tof", lambda c: _json_safe(c.tof)),
-            ("rmse", lambda c: _json_safe(c.rmse)), ("converged", lambda c: c.converged),
-            ("flat", lambda c: c.flat), ("elapsed", lambda c: _json_safe(c.elapsed)),
+            ("v_term", lambda c: _json_safe(c.v_term)
+             ), ("tof", lambda c: _json_safe(c.tof)),
+            ("rmse", lambda c: _json_safe(c.rmse)
+             ), ("converged", lambda c: c.converged),
+            ("flat", lambda c: c.flat), ("elapsed",
+                                         lambda c: _json_safe(c.elapsed)),
             ("attempts", lambda c: c.attempts),
             ("exp_max_range_km", lambda c: _json_safe(c.exp_max_range)),
             ("reachable", lambda c: c.reachable), ("flags", lambda c: c.flags())]
@@ -1591,19 +1631,22 @@ def html_summary_tiles(cells: list[Cell]) -> str:
     counts = status_counts(cells)
     n_env_known = sum(1 for c in cells if c.reachable is not None)
     n_unr = sum(1 for c in cells if c.beyond_envelope)
-    worst = max((c.defect for c in cells if c.defect == c.defect), default=float("nan"))
+    worst = max((c.defect for c in cells if c.defect ==
+                c.defect), default=float("nan"))
     tiles = [
         _tile("cells", len(cells)),
         _tile("ok", counts.get("ok", 0), "ok"),
         _tile("woven", counts.get("woven", 0), "woven"),
         _tile("infeasible", counts.get("infeasible", 0), "bad"),
-        _tile("no verdict", counts.get("unverified", 0) + counts.get("unknown", 0), "unknown"),
+        _tile("no verdict", counts.get("unverified", 0) +
+              counts.get("unknown", 0), "unknown"),
         _tile("never lofted", sum(1 for c in cells if c.flat), "woven"),
         _tile("worst defect", f"{worst:.2f}" if worst == worst else "-",
               "bad" if worst == worst and worst > 1.0 + DEFAULT_SPEED_TOL else ""),
     ]
     if n_env_known:
-        tiles.append(_tile("beyond envelope", f"{n_unr} / {n_env_known}", "bad" if n_unr else ""))
+        tiles.append(
+            _tile("beyond envelope", f"{n_unr} / {n_env_known}", "bad" if n_unr else ""))
     return "<div class='tiles'>" + "".join(tiles) + "</div>"
 
 
@@ -1616,9 +1659,11 @@ def html_table(cells: list[Cell], table_id: str = "cells") -> str:
     """
     cols = [("key", "key", "s"), ("range_km", "range", "n"), ("launch_alt_m", "h0", "n"),
             ("launch_speed_ms", "V0", "n"), ("target_alt_m", "ht", "n"),
-            ("apex", "apex", "n"), ("apex_gain", "gain", "n"), ("v_term", "V_term", "n"),
+            ("apex", "apex", "n"), ("apex_gain",
+                                    "gain", "n"), ("v_term", "V_term", "n"),
             ("tof", "tof", "n"), ("rmse", "rmse", "n"), ("status", "health", "s"),
-            ("v_min", "V_min", "n"), ("nav_min", "nav_g", "n"), ("defect", "defect", "n"),
+            ("v_min", "V_min", "n"), ("nav_min",
+                                      "nav_g", "n"), ("defect", "defect", "n"),
             ("reachable", "reach", "s"), ("t_bound", "t", "s"), ("flags", "flags", "s")]
     head = "".join(f"<th data-col='{i}' data-type='{ty}'>{lab}</th>"
                    for i, (_k, lab, ty) in enumerate(cols))
@@ -1631,10 +1676,13 @@ def html_table(cells: list[Cell], table_id: str = "cells") -> str:
         vals = [c.key, f"{c.coord('range_km'):.0f}", f"{c.coord('launch_alt_m'):.0f}",
                 f"{c.coord('launch_speed_ms'):.0f}", f"{c.coord('target_alt_m'):.0f}",
                 f"{c.apex:.0f}", f"{c.apex_gain:.0f}", f"{c.v_term:.0f}", f"{c.tof:.1f}",
-                f"{c.rmse:.1f}", c.status, num(c.v_min, ".0f"), num(c.nav_min, ".2f"),
-                num(c.defect, ".2f"), {None: "-", True: "yes", False: "no"}[c.reachable],
+                f"{c.rmse:.1f}", c.status, num(
+                    c.v_min, ".0f"), num(c.nav_min, ".2f"),
+                num(c.defect, ".2f"), {None: "-",
+                                       True: "yes", False: "no"}[c.reachable],
                 c.t_bound or "-", c.flags()]
-        cls = {"infeasible": " class='bad'", "woven": " class='woven'"}.get(c.status, "")
+        cls = {"infeasible": " class='bad'",
+               "woven": " class='woven'"}.get(c.status, "")
         tds = []
         for i, v in enumerate(vals):
             extra = f" class='st-{c.status}'" if i == 10 else ""
@@ -1720,13 +1768,15 @@ def plotly_family_div(cells: list[Cell], per_status_cap: int = 60):
     for s in order:
         grp = [c for c in cells if c.status == s]
         if len(grp) > per_status_cap:
-            notes.append(f"{len(grp)} {s} cells, showing the first {per_status_cap}")
+            notes.append(
+                f"{len(grp)} {s} cells, showing the first {per_status_cap}")
             grp = grp[:per_status_cap]
         chosen += grp
     fig = go.Figure()
     colours = {"ok": "#1f77b4", "woven": "#d97706", "infeasible": "#dc2626",
                "unverified": "#9ca3af", "unknown": "#9ca3af"}
-    dashes = {"woven": "dash", "infeasible": "dot", "unverified": "dot", "unknown": "dot"}
+    dashes = {"woven": "dash", "infeasible": "dot",
+              "unverified": "dot", "unknown": "dot"}
     for c in sorted(chosen, key=lambda c: (c.coord("range_km"), c.coord("launch_alt_m"),
                                            c.coord("launch_speed_ms"))):
         xi = np.linspace(0.0, 1.0, 120)
@@ -1735,7 +1785,8 @@ def plotly_family_div(cells: list[Cell], per_status_cap: int = 60):
             y=[float(c.alt(v)) / 1000.0 for v in xi],
             mode="lines", name=c.key,
             legendgroup=c.status, legendgrouptitle_text=c.status,
-            line=dict(color=colours[c.status], width=1.8, dash=dashes.get(c.status, "solid")),
+            line=dict(color=colours[c.status], width=1.8,
+                      dash=dashes.get(c.status, "solid")),
             customdata=[[c.status, c.v_term, c.apex, c.tof, c.rmse, c.defect]],
             hovertemplate=("<b>%{customdata[0]}</b> " + c.key +
                            "<br>V_term %{customdata[1]:.0f} m/s"
@@ -1746,7 +1797,8 @@ def plotly_family_div(cells: list[Cell], per_status_cap: int = 60):
     fig.update_layout(
         template="plotly_white", height=740, margin=dict(l=60, r=20, t=30, b=50),
         xaxis_title="downrange (km)", yaxis_title="altitude (km)",
-        legend=dict(groupclick="toggleitem", font=dict(size=10), itemsizing="constant"),
+        legend=dict(groupclick="toggleitem", font=dict(
+            size=10), itemsizing="constant"),
         hovermode="closest",
     )
     fig.update_xaxes(gridcolor="rgba(0,0,0,0.08)")
@@ -1768,7 +1820,8 @@ def write_html(path: Path, figs: list[tuple[str, object]], cells: list[Cell], de
     SVG -- the same figures as `--save` -- wrapped in a page with the verdict tiles
     and the sortable cell table. Both flavours embed the cell data as JSON.
     """
-    interactive = bool(getattr(args, "html_interactive", False)) if args is not None else False
+    interactive = bool(getattr(args, "html_interactive", False)
+                       ) if args is not None else False
     parts = [
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>",
         "<meta name='viewport' content='width=device-width,initial-scale=1'>",
@@ -1797,7 +1850,8 @@ def write_html(path: Path, figs: list[tuple[str, object]], cells: list[Cell], de
     for title, fig in figs:
         if interactive and title.lower().startswith("trajectories"):
             continue                                 # the interactive one replaces it
-        parts.append(f"<h2>{title}</h2><div class='card'>{fig_to_svg(fig, plt)}</div>")
+        parts.append(
+            f"<h2>{title}</h2><div class='card'>{fig_to_svg(fig, plt)}</div>")
     if cells:
         parts.append("<h2>cells</h2>")
         parts.append("<p class='note'>Click a heading to sort, type to filter. Built from the "
@@ -1858,7 +1912,8 @@ def summary(cells: list[Cell]) -> str:
     n_env_known = sum(1 for c in cells if c.reachable is not None)
     if n_env_known:
         bits.append(f"{n_env} beyond the envelope of {n_env_known} checked")
-    worst = max((c.defect for c in cells if c.defect == c.defect), default=float("nan"))
+    worst = max((c.defect for c in cells if c.defect ==
+                c.defect), default=float("nan"))
     if worst == worst:
         bits.append(f"worst defect ratio {worst:.2f}")
     flat = sum(1 for c in cells if c.flat)
@@ -1889,7 +1944,7 @@ def main():
                      help="tolerance for --fix matching (default 1e-3)")
     sel.add_argument("--min-terminal-speed", type=float, default=None,
                      help=f"hide cells below this V_term (the mod's filter is "
-                          f"{DEFAULT_MIN_TERMINAL:.0f})")
+                     f"{DEFAULT_MIN_TERMINAL:.0f})")
     sel.add_argument("--max-terminal-speed", type=float, default=None,
                      help="hide cells above this V_term (catches solver outliers)")
     sel.add_argument("--max-rmse", type=float, default=None,
@@ -1916,9 +1971,12 @@ def main():
                      help="keep only cells whose recorded/re-integrated speed ratio is at most "
                           "this (1.0 = the claim flies; grid_dymos.py --check allows 1.25)")
     lay = ap.add_argument_group("layout")
-    lay.add_argument("--rows", metavar="AXIS", help="axis to put down the grid")
-    lay.add_argument("--cols", metavar="AXIS", help="axis to put across the grid")
-    lay.add_argument("--sweep", metavar="AXIS", help="axis that becomes the lines")
+    lay.add_argument("--rows", metavar="AXIS",
+                     help="axis to put down the grid")
+    lay.add_argument("--cols", metavar="AXIS",
+                     help="axis to put across the grid")
+    lay.add_argument("--sweep", metavar="AXIS",
+                     help="axis that becomes the lines")
     lay.add_argument("--colour", metavar="AXIS",
                      help="axis to colour by in --overview (default launch_alt_m)")
     lay.add_argument("--normalised", action="store_true",
@@ -1936,23 +1994,28 @@ def main():
     lay.add_argument("--max-legend", type=int, default=12,
                      help="suppress the legend above this many lines (default 12)")
     out = ap.add_argument_group("output")
-    out.add_argument("--overview", action="store_true", help="grid health panels instead")
-    out.add_argument("--cell", metavar="KEY", help="detail view of one cell (key or index)")
+    out.add_argument("--overview", action="store_true",
+                     help="grid health panels instead")
+    out.add_argument("--cell", metavar="KEY",
+                     help="detail view of one cell (key or index)")
     out.add_argument("--detail-extra", action="store_true",
                      help="in --cell, also plot speed and gamma/alpha when stored")
-    out.add_argument("--list", action="store_true", help="print the cells as a table")
+    out.add_argument("--list", action="store_true",
+                     help="print the cells as a table")
     out.add_argument("--compare", action="store_true",
                      help="with two or more --table, label each table's cells separately")
     out.add_argument("--save", metavar="FILE",
                      help="write a PNG here (default: trajectories.png when nothing else is asked)")
-    out.add_argument("--html", metavar="FILE", help="write a self-contained HTML page")
+    out.add_argument("--html", metavar="FILE",
+                     help="write a self-contained HTML page")
     out.add_argument("--html-interactive", action="store_true",
                      help="draw the family plot with plotly instead of as a static SVG, "
                           "so cells can be hovered, zoomed and grouped by verdict. Writes "
                           "an HTML page on its own (trajectories.html) or into --html FILE. "
                           "Needs `pip install plotly`; without it the page keeps the static "
                           "figures and says so, on the page and on stderr")
-    out.add_argument("--show", action="store_true", help="open a window (needs a display)")
+    out.add_argument("--show", action="store_true",
+                     help="open a window (needs a display)")
     out.add_argument("--dpi", type=int, default=140)
     args = ap.parse_args()
 
@@ -1962,7 +2025,8 @@ def main():
     if args.table:
         multi = len(args.table) > 1
         for p in args.table:
-            cs, nt = load_table(Path(p), label=(Path(p).stem if multi else None))
+            cs, nt = load_table(Path(p), label=(
+                Path(p).stem if multi else None))
             cells += cs
             notes += nt
     if args.runs:
@@ -1972,19 +2036,22 @@ def main():
     if not cells and not args.flight:
         for n in notes:
             print(n, file=sys.stderr)
-        raise SystemExit("no cells loaded: pass --table FILE or --runs DIR (--help for usage)")
+        raise SystemExit(
+            "no cells loaded: pass --table FILE or --runs DIR (--help for usage)")
     for n in notes:
         print(n, file=sys.stderr)
 
     if args.flight:
         plt = import_mpl(args.show)
-        figs = [("flight logs", plot_flight([Path(p) for p in args.flight], args, plt))]
+        figs = [("flight logs", plot_flight([Path(p)
+                 for p in args.flight], args, plt))]
         save_figs(figs, args, plt, cells=[])
         return
 
     cells = select(cells, args)
     if not cells:
-        raise SystemExit("selection is empty -- check --fix values, --health and the other filters")
+        raise SystemExit(
+            "selection is empty -- check --fix values, --health and the other filters")
     print(f"plotting {summary(cells)}", file=sys.stderr)
 
     if args.list:
@@ -2011,7 +2078,8 @@ def main():
                 f"Keys look like {keys} -- the axis values in order "
                 f"(range_km_launch_alt_m_launch_speed_ms_target_alt_m_target_speed_ms), "
                 f"or a position like #12. --list prints every one.")
-        figs.append((f"cell {pick[0].key}", plot_detail(pick, args, plt, desc)))
+        figs.append(
+            (f"cell {pick[0].key}", plot_detail(pick, args, plt, desc)))
     elif args.overview:
         figs.append(("grid health", plot_overview(cells, args, plt, desc)))
     else:
@@ -2028,7 +2096,8 @@ def main():
             args_sweep.rows = args.rows
             args_sweep.cols = args.cols
             args_sweep.legend = True
-            figs.append(("all sources", plot_family(cells, args_sweep, plt, desc)))
+            figs.append(("all sources", plot_family(
+                cells, args_sweep, plt, desc)))
         else:
             figs.append(("trajectories", plot_family(cells, args, plt, desc)))
 
@@ -2044,7 +2113,8 @@ def save_figs(figs, args, plt, cells):
         print(f"NOTE: --html-interactive without --html; writing {args.html}. "
               f"Pass --html FILE to choose the name.", file=sys.stderr)
     if args.html:
-        write_html(Path(args.html), figs, cells, describe(cells, args) if cells else "", plt, args)
+        write_html(Path(args.html), figs, cells, describe(
+            cells, args) if cells else "", plt, args)
     if args.show:
         plt.show()
     if args.save or not args.html:

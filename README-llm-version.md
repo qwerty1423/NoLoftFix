@@ -86,9 +86,9 @@ purpose.
 
 ## 2. Requirements
 
-* **Plugin**: .NET SDK, Windows or Linux, and the game's managed assemblies (see
+- **Plugin**: .NET SDK, Windows or Linux, and the game's managed assemblies (see
   section 3).
-* **Simulator**: Python 3 with the packages listed in `sim/requirements.txt` (numpy,
+- **Simulator**: Python 3 with the packages listed in `sim/requirements.txt` (numpy,
   scipy, matplotlib, dymos, openmdao), plus the parsed coefficient file
   `sim/coeffs_*.json` for the missile being solved.
 
@@ -163,20 +163,20 @@ restart: the plugin watches the file and calls `ConfigFile.Reload()`, and each s
 read through its `ConfigEntry` rather than copied at load time. The three settings marked
 *restart* are exceptions.
 
-| Key                               | Default | Meaning                                                                                                                                                                       |
-| --------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Following/LookaheadSeconds`      | 3.0     | Lookahead distance in seconds. The primary tracking parameter: values that are too small make the missile cut corners, and values that are too large make it lag the profile. |
-| `Following/MaxTrackAngleDeg`      | 12      | Maximum deviation of the aimpoint from the profile slope. Bounds the recovery rate so that a decelerating missile cannot be commanded into an increasingly steep dive.        |
-| `Following/TrackGain`             | 0.5     | Proportional gain on altitude tracking error. A value of 0 gives pure lookahead.                                                                                              |
-| `Following/TargetAltLagRateMPerS` | 250     | Maximum rate at which the reference endpoint may move. Must exceed the target's own vertical rate.                                                                            |
-| `Following/FloorAltM`             | 60      | Lower bound on the aimpoint altitude. The plugin has no terrain query.                                                                                                        |
-| `Lookup/MaxNormalisedDistance`    | 0.5     | Distance from any solved cell beyond which the plugin does not engage and the game's original lofting applies.                                                                |
-| `General/MinCellTerminalSpeedMs`  | 800     | Cells predicting a slower arrival are discarded at load time. *restart*                                                                                                       |
-| `General/RejectFlatCells`         | true    | Discards cells that never lofted (apex equal to launch altitude). *restart*                                                                                                   |
-| `General/Enabled`                 | true    | Master switch, checked before patching. *restart*                                                                                                                             |
-| `General/VerboseLogging`          | true    | Enables the `[flight]`, `[terminal]` and `[law]` log lines.                                                                                                                   |
-| `Following/FlightLogIntervalS`    | 1       | Interval in seconds between those lines.                                                                                                                                      |
-| `Following/DebugDraw`             | true    | Draws the remaining reference profile with a `LineRenderer`.                                                                                                                  |
+| Key                               | Meaning                                                                                                                                                                       |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Following/LookaheadSeconds`      | Lookahead distance in seconds. The primary tracking parameter: values that are too small make the missile cut corners, and values that are too large make it lag the profile. |
+| `Following/MaxTrackAngleDeg`      | Maximum deviation of the aimpoint from the profile slope. Bounds the recovery rate so that a decelerating missile cannot be commanded into an increasingly steep dive.        |
+| `Following/TrackGain`             | Proportional gain on altitude tracking error. A value of 0 gives pure lookahead.                                                                                              |
+| `Following/TargetAltLagRateMPerS` | Maximum rate at which the reference endpoint may move. Must exceed the target's own vertical rate.                                                                            |
+| `Following/FloorAltM`             | Lower bound on the aimpoint altitude.                                                                                                                                         |
+| `Lookup/MaxNormalisedDistance`    | Distance from any solved cell beyond which the plugin does not engage and the game's original lofting applies.                                                                |
+| `General/MinCellTerminalSpeedMs`  | Cells predicting a slower arrival are discarded at load time. *restart*                                                                                                       |
+| `General/RejectFlatCells`         | Discards cells with apex equal to launch altitude. *restart*                                                                                                                  |
+| `General/Enabled`                 | Master switch, checked before patching. *restart*                                                                                                                             |
+| `General/VerboseLogging`          | Enables the `[flight]`, `[terminal]` and `[law]` log lines.                                                                                                                   |
+| `Following/FlightLogIntervalS`    | Interval in seconds between those lines.                                                                                                                                      |
+| `Following/DebugDraw`             | Draws the remaining reference profile with a `LineRenderer`.                                                                                                                  |
 
 Twelve keys remain of the original twenty-four. The removed entries (`Neighbours`,
 `IdwPower`, `MinLookaheadM`, `MaxLookaheadM`, `XfLagRateMPerS`, `BumpFadeSeconds`,
@@ -504,12 +504,12 @@ list the cells that a re-optimisation would select.
 select cells -> for each cell: solve up to --reopt-runs attempts -> keep the best by --best-of
 ```
 
-* The first attempt is warm-started from the cell's stored trajectory, if one exists, and
+- The first attempt is warm-started from the cell's stored trajectory, if one exists, and
   can only lose. Later attempts are cold starts, which is where the variation between
   attempts originates.
-* An attempt replaces the incumbent only if it ranks better. The losing attempt file is
+- An attempt replaces the incumbent only if it ranks better. The losing attempt file is
   deleted when the winner is written, unless `--keep-attempts` is given.
-* `--iterations N` re-solves a cell until it converges or until it has had N attempts. It
+- `--iterations N` re-solves a cell until it converges or until it has had N attempts. It
   is appropriate when convergence rather than variation is the problem.
 
 The winner rule compares attempts in tiers, because the table ships the polynomial rather
@@ -520,11 +520,11 @@ than the trajectory:
 2. Otherwise, an attempt whose fit error is within `--max-rmse` ranks above one whose fit
    error is not.
 3. Within a tier, the rule named by `--best-of` applies:
-   * `best` (default): highest terminal speed.
-   * `converged`: as `best`, with a bonus for a converged attempt.
-   * `fastest`: as `best`, without the fit preference.
-   * `first`: keeps the existing cell.
-   * `flyable`: as `best`, with two additional tiers: an attempt whose re-integration
+   - `best` (default): highest terminal speed.
+   - `converged`: as `best`, with a bonus for a converged attempt.
+   - `fastest`: as `best`, without the fit preference.
+   - `first`: keeps the existing cell.
+   - `flyable`: as `best`, with two additional tiers: an attempt whose re-integration
      disagrees with its own arrival speed ranks below all others, and a woven profile
      ranks below every straight one.
 
@@ -572,11 +572,11 @@ python3 grid_dymos.py --grid grids/scythe-v2.json --check --table mod/Tables/lof
 
 `--check` prints a verdict for each cell.
 
-* `ok`: the trajectory is consistent.
-* `woven`: the altitude profile has more turning points than `--max-weaves`. The cell is
+- `ok`: the trajectory is consistent.
+- `woven`: the altitude profile has more turning points than `--max-weaves`. The cell is
   flyable, but the profile is not a loft; it is typically a stall that the optimiser
   recovered from.
-* `INFEASIBLE`: one of two conditions, identified in the output.
+- `INFEASIBLE`: one of two conditions, identified in the output.
 
 ```
 INFEASIBLE 50_9000_600_200_0  claims 6365 m/s, re-integrating the same alpha
@@ -607,12 +607,12 @@ launch condition, and separate starts have differed by nearly a factor of three.
 
 ### 13.2 Limitations of validation
 
-* With `--table`, cells can only be checked for turning points, because a table contains
+- With `--table`, cells can only be checked for turning points, because a table contains
   no trajectory. Cells that are not woven are reported as `unverified` and the command
   states this.
-* Without `--store-solutions`, the trajectory is not available, so the verdict is derived
+- Without `--store-solutions`, the trajectory is not available, so the verdict is derived
   from the `defect_ratio` recorded at solve time.
-* Re-integration is a reconstruction, not a certificate. The control nodes are placed
+- Re-integration is a reconstruction, not a certificate. The control nodes are placed
   where dymos places them and the ODE is the same, but a cell that stopped on the
   iteration budget can re-integrate to between 0.71 and 1.10 of its own claim while
   remaining acceptable. The verdict is intended to catch gross disagreement, defined as
@@ -710,32 +710,32 @@ python3 plot_trajectories.py --table ../mod/Tables/loft_table_scythe.json \
 python3 plot_trajectories.py --flight ../../BepInEx/LogOutput.log --save flight.png
 ```
 
-| Option                                                                                          | Meaning                                                                                                                                                                                                                     |
-| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--table FILE`                                                                                  | Merged table to plot. May be repeated; `--compare` labels each table separately.                                                                                                                                            |
-| `--runs DIR`                                                                                    | Run directory to plot, using `runs/<name>/cells/*.json`.                                                                                                                                                                    |
-| `--list`                                                                                        | Prints every cell key with apex, gain, terminal speed, flight time, fit error and flags.                                                                                                                                    |
-| `--cell KEY`                                                                                    | Plots one cell. The key is the same in a table and in a run directory.                                                                                                                                                      |
-| `--overview`                                                                                    | Grid health panels: apex, terminal speed, flight time and fit error against range, plus a panel each for the path minima and the defect ratio when the cells carry them (a table merged before those fields existed falls back to the four original panels). Cells beyond the solved envelope are drawn as hollow red squares regardless of verdict.|
-| `--fix AXIS=VALUE`                                                                              | Restricts the plot to one value of one axis.                                                                                                                                                                                |
-| `--rows`, `--cols`, `--sweep`                                                                   | Select which free axis becomes the panel grid and which becomes the curves.                                                                                                                                                 |
-| `--colour AXIS`                                                                                 | Colour of the curves.                                                                                                                                                                                                       |
-| `--normalised`                                                                                  | Uses percent of `Xf` on the x axis.                                                                                                                                                                                         |
-| `--palette NAME`                                                                                | Colour scheme: `auto` (default; tab10 up to ten lines, viridis beyond), `okabe-ito` (colour-blind safe for the lines), or a sequential map such as `cividis` for `--overview`'s colour scale.                               |
-| `--min-terminal-speed`, `--max-terminal-speed`, `--max-rmse`, `--hide-flat`, `--only-converged` | Filters on the recorded numbers: terminal speed, fit error, flat cells, and cells the solver did not converge.                                                                                                              |
-| `--health STATE`                                                                                | Keep only cells with this `--check` verdict (`ok`, `woven`, `infeasible`, `unverified`). Repeatable. Cells with no recorded verdict are excluded and counted, because "not checked" is not "passed".                        |
-| `--reachable` / `--unreachable`                                                                 | Keep only cells inside the solved envelope, or only those beyond it. Both need a table merged with an `envelope.json`.                                                                                                      |
-| `--min-v-along MS`                                                                              | Keep only cells whose lowest speed along the path is at least this.                                                                                                                                                         |
-| `--max-defect RATIO`                                                                            | Keep only cells whose recorded/re-integrated ratio is at most this (1.0 means the claim flies).                                                                                                                             |
-| `--include-attempts`                                                                            | Also plots `<key>.attempt<N>.json` files. Without this option, attempts are ignored because they repeat the same cell.                                                                                                      |
-| `--reoptimise`                                                                                  | Colors attempts as one cell's attempts.                                                                                                                                                                                     |
-| `--annotate`, `--no-annotate`, `--legend`, `--no-legend`, `--max-legend N`                      | Label controls. Curves are labelled at the point where they are furthest from the other curves in the panel, because all curves in a panel end at the same aimpoint. Above 12 curves the legend is replaced by annotations. |
-| `--max-panels N`                                                                                | Maximum number of panels, default 36. Panels are thinned by even spacing that preserves both ends, so the longest range is never dropped. The values that were omitted are reported on stderr.                              |
-| `--detail-extra`                                                                                | With `--cell`, plots speed, flight path angle, angle of attack and the polynomial residual at the solution nodes. Requires `--store-solutions`. The speed panel marks the path minimum the audit measured against the floor it was solved with.|
-| `--html FILE`                                                                                   | Writes one self-contained page: verdict tiles, the figures as inline SVG, and a sortable, filterable table of every cell. No network and no external assets, so it renders offline.                                         |
-| `--html-interactive`                                                                            | Draws the page with plotly instead of as a static SVG, so curves can be hovered (cell key, verdict, terminal speed), grouped by verdict and zoomed. The plotly runtime is inlined, so the page stays self-contained; without plotly installed it falls back to the static figure and says so on the page. On its own it writes `trajectories.html` and reports the name it chose; with `--html FILE` that file is the one made interactive. Requires the optional `plotly` from `requirements.txt`.|
-| `--flight LOG`                                                                                  | Parses the `[flight]` lines of a BepInEx log and plots, per round: altitude against the reference it was commanded to follow, the tracking error, the slope loop's command against what the airframe achieved, and speed with the game's self-destruct and load-time-filter speeds marked. The log carries a state section and a slope section, and the two reuse key names (`ref` is an altitude in one and an angle in the other); the parser keeps them apart.|
-| `--save FILE`, `--html`, `--show`, `--dpi`                                                      | Output controls. `--html` writes a self-contained page.                                                                                                                                                                     |
+| Option                                                                                          | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--table FILE`                                                                                  | Merged table to plot. May be repeated; `--compare` labels each table separately.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `--runs DIR`                                                                                    | Run directory to plot, using `runs/<name>/cells/*.json`.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `--list`                                                                                        | Prints every cell key with apex, gain, terminal speed, flight time, fit error and flags.                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `--cell KEY`                                                                                    | Plots one cell. The key is the same in a table and in a run directory.                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `--overview`                                                                                    | Grid health panels: apex, terminal speed, flight time and fit error against range, plus a panel each for the path minima and the defect ratio when the cells carry them (a table merged before those fields existed falls back to the four original panels). Cells beyond the solved envelope are drawn as hollow red squares regardless of verdict.                                                                                                                                                |
+| `--fix AXIS=VALUE`                                                                              | Restricts the plot to one value of one axis.                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `--rows`, `--cols`, `--sweep`                                                                   | Select which free axis becomes the panel grid and which becomes the curves.                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `--colour AXIS`                                                                                 | Colour of the curves.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `--normalised`                                                                                  | Uses percent of `Xf` on the x axis.                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `--palette NAME`                                                                                | Colour scheme: `auto` (default; tab10 up to ten lines, viridis beyond), `okabe-ito` (colour-blind safe for the lines), or a sequential map such as `cividis` for `--overview`'s colour scale.                                                                                                                                                                                                                                                                                                       |
+| `--min-terminal-speed`, `--max-terminal-speed`, `--max-rmse`, `--hide-flat`, `--only-converged` | Filters on the recorded numbers: terminal speed, fit error, flat cells, and cells the solver did not converge.                                                                                                                                                                                                                                                                                                                                                                                      |
+| `--health STATE`                                                                                | Keep only cells with this `--check` verdict (`ok`, `woven`, `infeasible`, `unverified`). Repeatable. Cells with no recorded verdict are excluded and counted, because "not checked" is not "passed".                                                                                                                                                                                                                                                                                                |
+| `--reachable` / `--unreachable`                                                                 | Keep only cells inside the solved envelope, or only those beyond it. Both need a table merged with an `envelope.json`.                                                                                                                                                                                                                                                                                                                                                                              |
+| `--min-v-along MS`                                                                              | Keep only cells whose lowest speed along the path is at least this.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `--max-defect RATIO`                                                                            | Keep only cells whose recorded/re-integrated ratio is at most this (1.0 means the claim flies).                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `--include-attempts`                                                                            | Also plots `<key>.attempt<N>.json` files. Without this option, attempts are ignored because they repeat the same cell.                                                                                                                                                                                                                                                                                                                                                                              |
+| `--reoptimise`                                                                                  | Colors attempts as one cell's attempts.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `--annotate`, `--no-annotate`, `--legend`, `--no-legend`, `--max-legend N`                      | Label controls. Curves are labelled at the point where they are furthest from the other curves in the panel, because all curves in a panel end at the same aimpoint. Above 12 curves the legend is replaced by annotations.                                                                                                                                                                                                                                                                         |
+| `--max-panels N`                                                                                | Maximum number of panels, default 36. Panels are thinned by even spacing that preserves both ends, so the longest range is never dropped. The values that were omitted are reported on stderr.                                                                                                                                                                                                                                                                                                      |
+| `--detail-extra`                                                                                | With `--cell`, plots speed, flight path angle, angle of attack and the polynomial residual at the solution nodes. Requires `--store-solutions`. The speed panel marks the path minimum the audit measured against the floor it was solved with.                                                                                                                                                                                                                                                     |
+| `--html FILE`                                                                                   | Writes one self-contained page: verdict tiles, the figures as inline SVG, and a sortable, filterable table of every cell. No network and no external assets, so it renders offline.                                                                                                                                                                                                                                                                                                                 |
+| `--html-interactive`                                                                            | Draws the page with plotly instead of as a static SVG, so curves can be hovered (cell key, verdict, terminal speed), grouped by verdict and zoomed. The plotly runtime is inlined, so the page stays self-contained; without plotly installed it falls back to the static figure and says so on the page. On its own it writes `trajectories.html` and reports the name it chose; with `--html FILE` that file is the one made interactive. Requires the optional `plotly` from `requirements.txt`. |
+| `--flight LOG`                                                                                  | Parses the `[flight]` lines of a BepInEx log and plots, per round: altitude against the reference it was commanded to follow, the tracking error, the slope loop's command against what the airframe achieved, and speed with the game's self-destruct and load-time-filter speeds marked. The log carries a state section and a slope section, and the two reuse key names (`ref` is an altitude in one and an angle in the other); the parser keeps them apart.                                   |
+| `--save FILE`, `--html`, `--show`, `--dpi`                                                      | Output controls. `--html` writes a self-contained page.                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 ## 17. File layout
 
@@ -762,34 +762,34 @@ mod/
 
 ## 18. Limitations
 
-* **No terrain awareness.** The aimpoint is clamped to `FloorAltM`, not to the ground.
+- **No terrain awareness.** The aimpoint is clamped to `FloorAltM`, not to the ground.
   Low-level trajectories require tables generated with terrain in the loop.
-* **The terminal phase is unaffected.** Inside `terminalRange` (12 000 m) the plugin
+- **The terminal phase is unaffected.** Inside `terminalRange` (12 000 m) the plugin
   returns without overriding, so the game's own radar-locked lead calculation applies.
   The plugin covers the midcourse only.
-* **Blending cells with different endpoints.** The polynomials are pinned to their own
+- **Blending cells with different endpoints.** The polynomials are pinned to their own
   launch and target altitudes, so an inverse-distance blend of two cells matches neither
   endpoint exactly. Measured: querying 1 000 m between cells at 305 m and 3 048 m gives
   `h(1) = 679 m`. The effect is limited because the plugin stops overriding inside
   `terminalRange`, and it is the reason a denser `target_alt_m` axis is more valuable
   than a denser `range_km` axis.
-* **`target_speed_ms` is carried but not solved.** Reference profiles are generated
+- **`target_speed_ms` is carried but not solved.** Reference profiles are generated
   against a fixed predicted intercept point, as in the paper. Target motion is handled at
   runtime; see section 4.3.
-* **The game is server-authoritative.** Missiles are simulated only where `LocalSim` is
+- **The game is server-authoritative.** Missiles are simulated only where `LocalSim` is
   true. On a dedicated server the plugin must be installed there as well.
-* **`--fail-rmse X` is not implemented.** The equivalent workflow is
+- **`--fail-rmse X` is not implemented.** The equivalent workflow is
   `--reoptimise --max-rmse X --rmse-filter --dry-run` followed by a re-optimisation with
   that filter. No persistent failed flag is recorded in a cell.
-* **The optimiser is not reproducible.** Two runs of the same command produce different
+- **The optimiser is not reproducible.** Two runs of the same command produce different
   results. One fixed 15 km solve returned flight times between 13.08 s and 15.43 s across
   eight runs. A change should therefore not be attributed to a patch on the basis of a
   single run, and comparisons between trees should be made on counts rather than hashes.
-* **Plugin behaviour that requires in-game verification.** `TrackGain` has no rate
+- **Plugin behaviour that requires in-game verification.** `TrackGain` has no rate
   damping, so the tracking law can chase its own lag. `Debug.DrawLine` in
   `LoftGuidance.Draw` is obsolete now that a `LineRenderer` is used. The load-time filters
   (`MinCellTerminalSpeedMs`, `RejectFlatCells`) discard cells rather than reporting them,
   which is why 45 flat cells can remain in a shipped table without notice.
-* **Validation is a reconstruction.** The re-integration check reproduces the stored
+- **Validation is a reconstruction.** The re-integration check reproduces the stored
   trajectory through the same ODE, but it is not an independent verification of the
   dynamics; see section 13.2.
