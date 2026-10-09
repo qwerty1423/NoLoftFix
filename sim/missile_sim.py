@@ -1,7 +1,3 @@
-"""
-missile_sim.py -- 2-D point-mass replica of Nuclear Option's missile physics.
-"""
-
 from __future__ import annotations
 
 import json
@@ -14,16 +10,8 @@ import numpy as np
 G = 9.80665
 
 
-# --------------------------------------------------------------------------
-# AnimationCurve surrogate
-# --------------------------------------------------------------------------
 class Curve:
-    """
-    UnityEngine.AnimationCurve replica.
-    """
-
     def __init__(self, keys):
-        """keys: [[time, value], ...] or [[time, value, inSlope, outSlope], ...]"""
         k = [list(map(float, row)) for row in keys]
         if not k:
             raise ValueError("empty curve")
@@ -33,10 +21,9 @@ class Curve:
         self.t = np.array([r[0] for r in k])
         self.v = np.array([r[1] for r in k])
         if w == 4:
-            self.mi = np.array([r[2] for r in k])   # inSlope
-            self.mo = np.array([r[3] for r in k])   # outSlope
+            self.mi = np.array([r[2] for r in k])
+            self.mo = np.array([r[3] for r in k])
         else:
-            # no tangents given: fall back to finite differences (Catmull-Rom-ish)
             self.mi = np.gradient(self.v, self.t)
             self.mo = self.mi.copy()
         self._hermite = w == 4
@@ -78,7 +65,6 @@ class Curve:
 
 
 def air_density_isa(alt_m: float) -> float:
-    """International Standard Atmosphere density, kg/m^3."""
     if alt_m < 11000.0:
         T = 288.15 - 6.5e-3 * alt_m
         p = 101325.0 * (T / 288.15) ** 5.2561
@@ -96,29 +82,24 @@ def speed_of_sound_isa(alt_m: float) -> float:
     return math.sqrt(1.4 * 287.05 * T)
 
 
-# --------------------------------------------------------------------------
-# Coefficients
-# --------------------------------------------------------------------------
 @dataclass
 class MotorSpec:
-    thrust: float          # N
-    burn_time: float       # s
-    fuel_mass: float       # kg
-    delay: float = 0.0     # s (Motor.delayTimer)
-    top_speed: float = 1e9  # Motor.topSpeed gate; default is c
+    thrust: float           # N
+    burn_time: float        # s
+    fuel_mass: float        # kg
+    delay: float = 0.0      # s
+    top_speed: float = 1e9
 
 
 @dataclass
 class Coeffs:
-    """Everything the prefab dump (plan section 3.1) must supply."""
-
     # Missile
     mass_dry: float
     fin_area: float
     supersonic_drag: float
     drag_curve: Curve
     lift_curve: Curve
-    torque: float                # rad/s^2 per unit input
+    torque: float
     max_turn_rate_dps: float
     g_limit: float
     motors: list[MotorSpec] = field(default_factory=list)
@@ -130,9 +111,9 @@ class Coeffs:
     guidance_delay: float = 1.0
     max_lead: float = 5.0
 
-    # Environment overrides (None -> ISA)
+    # Environment overrides
     air_density_curve: Curve | None = None
-    autopilot_lag: float = 0.0   # s, first-order lag surrogate
+    autopilot_lag: float = 0.0
 
     def air_density(self, alt_m: float) -> float:
         if self.air_density_curve is not None:
@@ -170,36 +151,27 @@ class Coeffs:
         )
 
 
-# --------------------------------------------------------------------------
-# Vanilla loft law, transcribed from ARHSeeker
-# --------------------------------------------------------------------------
 def loft_bias_vanilla(t_go: float, target_dist: float, loft_amount: float) -> float:
-    """ARHSeeker.Seek(), decomp/ARHSeeker.cs:295.
-
-        Mathf.Min(timeToTarget^2 * 4.905f * loftAmount, targetDist * loftAmount)
-    """
     if loft_amount <= 0.0:
         return 0.0
     return min(t_go * t_go * 4.905 * loft_amount, target_dist * loft_amount)
 
 
 def t_go_vanilla(rel_range_vec_norm, v_vec, target_dist: float) -> float:
-    """ARHSeeker.SlowChecks():  targetDist / Mathf.Max(closingSpeed, 10f)."""
     closing = float(np.dot(rel_range_vec_norm, v_vec))
     return target_dist / max(closing, 10.0)
 
 
-# --------------------------------------------------------------------------
 # Simulator
-# --------------------------------------------------------------------------
+
 @dataclass
 class Engagement:
     launch_alt: float
     launch_speed: float
-    launch_pitch: float          # rad
-    target_range: float          # m downrange
+    launch_pitch: float
+    target_range: float
     target_alt: float
-    target_speed: float          # m/s, positive = receding
+    target_speed: float
     target_accel: float = 0.0
 
 
@@ -212,7 +184,7 @@ class Result:
     apex_fraction: float
     terminal_speed: float
     tof: float
-    max_q: float                 # max dynamic pressure
+    max_q: float
     max_g: float
     min_speed_after_burnout: float
     history: dict
@@ -223,7 +195,6 @@ class MissileSim:
         self.c = coeffs
         self.dt = dt
 
-    # --- aero, mirrors Missile.ApplyAero ----------------------------------
     def _aero(self, vx, vz, theta, alt, mass, fin_area):
         c = self.c
         V = math.hypot(vx, vz)
@@ -232,7 +203,6 @@ class MissileSim:
 
         gamma = math.atan2(vz, vx)
         alpha = theta - gamma
-        # Vector3.Angle is UNSIGNED: the curves are evaluated at |alpha|
         aoa_rad = abs(self._wrap_pi(alpha))
 
         rho = c.air_density(alt)
@@ -251,22 +221,11 @@ class MissileSim:
                 D *= 1.0 + num7 ** 3 * (c.supersonic_drag + 0.15)
 
         s = math.copysign(1.0, alpha) if alpha != 0.0 else 0.0
-        # drag opposes velocity; lift is perpendicular to velocity, toward nose
         fx = -D * (vx / V) + L * (-(vz / V)) * s
         fz = -D * (vz / V) + L * ((vx / V)) * s
         return fx, fz, qbar
 
-    # --- propulsion, mirrors MotorThrust + Motor.Thrust --------------------
     def _motor(self, state, theta):
-        """Returns (thrust_force_x, thrust_force_z, fuel_burned).
-
-        NOTE (verified in decomp/Missile.cs, Motor.Thrust):
-            fuelMass -= burnRate * dt          <- independent of throttle
-            rb.AddForce(thrust * throttle * forward)
-        so throttle scales thrust but NOT propellant consumption. Throttling
-        down therefore costs total impulse rather than saving fuel. This kills
-        the free lunch that CEAS-GNC-2026-016 section 5 relies on.
-        """
         c = self.c
         st = state["motors"]
         if st["stage"] >= len(c.motors):
@@ -299,15 +258,9 @@ class MissileSim:
             a += 2 * math.pi
         return a
 
-    # --- run ---------------------------------------------------------------
     def run(self, eng: Engagement, aimpoint_fn, t_max: float = 400.0,
             record: bool = True, guards: bool = True):
-        """aimpoint_fn(t, state) -> (ap_x, ap_alt) or None for 'hold attitude'.
 
-        guards=False disables the self-destruct / missed-target / terrain
-        terminations so the trajectory always flies to the PIP. The optimiser
-        needs that: those are CONSTRAINTS to be scored, not reasons to stop.
-        """
         c, dt = self.c, self.dt
         st = {
             "x": 0.0, "alt": eng.launch_alt,
@@ -332,13 +285,11 @@ class MissileSim:
         for _ in range(n):
             t = st["t"]
             if t >= c.guidance_delay:
-                st["fin"] = c.fin_area      # Missile.DeployFins()
-            # --- target motion (constant velocity) ---
+                st["fin"] = c.fin_area
             tx_now = eng.target_range + eng.target_speed * t
             talt_now = eng.target_alt + 0.5 * eng.target_accel * t * t
             state_view = dict(st, target_x=tx_now, target_alt=talt_now)
 
-            # --- guidance: aimpoint -> rate-limited pursuit ---
             ap = aimpoint_fn(t, state_view)
             if ap is None:
                 q_cmd = 0.0
@@ -346,13 +297,8 @@ class MissileSim:
                 dx = ap[0] - st["x"]
                 dz = ap[1] - st["alt"]
                 e = self._wrap_pi(math.atan2(dz, dx) - st["theta"])
-                # Surrogate autopilot: PD rate command. The damping term is NOT
-                # optional -- without it q never returns to zero and the missile
-                # overshoots until it flies backwards. The game's PID2D has a D
-                # term and Missile.Steering damps roll with
-                # -localAngularVel.z * 5f; this is the equivalent.
                 kp = 4.0
-                kd = 2.0 * math.sqrt(kp)          # critically damped
+                kd = 2.0 * math.sqrt(kp)
                 q_cmd = float(np.clip(kp * e - kd * st["q"],
                                       -c.q_rate_limit, c.q_rate_limit))
             if c.autopilot_lag > 0.0:
@@ -360,7 +306,6 @@ class MissileSim:
             else:
                 st["q_cmd"] = q_cmd
 
-            # --- ApplyAero rate clamp (verbatim structure) ---
             V = math.hypot(st["vx"], st["vz"])
             q_max = min(math.radians(c.max_turn_rate_dps),
                         9.81 * c.g_limit / max(V, 1.0))
@@ -370,7 +315,6 @@ class MissileSim:
                 math.copysign(
                     excess / dt, st["q_cmd"]) if excess > 0 else st["q_cmd"]
 
-            # --- forces ---
             fx, fz, qbar = self._aero(st["vx"], st["vz"], st["theta"], st["alt"],
                                       st["mass"], st["fin"])
             tfx, tfz, burned = self._motor(st, st["theta"])
@@ -381,7 +325,6 @@ class MissileSim:
             ax = (fx + tfx) / st["mass"]
             az = (fz + tfz) / st["mass"] - G
 
-            # --- integrate ---
             st["x"] += st["vx"] * dt
             st["alt"] += st["vz"] * dt
             st["vx"] += ax * dt
@@ -391,14 +334,12 @@ class MissileSim:
             st["t"] += dt
 
             V = math.hypot(st["vx"], st["vz"])
-            # g-load is turn RATE * speed / g, not angular acceleration
             gload = abs(st["q"]) * V / 9.81 if V > 1 else 0.0
             max_q = max(max_q, qbar)
             max_g = max(max_g, gload)
             if st["alt"] > apex_alt:
                 apex_alt, apex_x = st["alt"], st["x"]
 
-            # --- bookkeeping ---
             if record:
                 hist["t"].append(t)
                 hist["x"].append(st["x"])
@@ -412,7 +353,6 @@ class MissileSim:
                 hist["mach"].append(V / c.speed_of_sound(st["alt"]))
                 hist["accel"].append(math.hypot(ax, az + G))
 
-            # --- termination ---
             if guards:
                 if st["alt"] < 0.0:
                     return self._res(False, "terrain", apex_alt, apex_x, eng, st, V,
@@ -420,13 +360,11 @@ class MissileSim:
                 if V < c.self_destruct_at_speed and t > 2.0:
                     return self._res(False, "self_destruct_speed", apex_alt, apex_x,
                                      eng, st, V, max_q, max_g, min_speed, engine_out_t, hist)
-                # MissedTarget(): Dot(aimPoint - pos, v) < 0
                 if ap is not None:
                     dvx, dvz = ap[0] - st["x"], ap[1] - st["alt"]
                     if dvx * st["vx"] + dvz * st["vz"] < 0.0 and t > 10.0:
                         return self._res(False, "missed_target", apex_alt, apex_x, eng,
                                          st, V, max_q, max_g, min_speed, engine_out_t, hist)
-            # intercept, or (guards off) reaching the PIP downrange
             r = math.hypot(tx_now - st["x"], talt_now - st["alt"])
             if (r < 50.0 and t > 1.0) or (not guards and st["x"] >= tx_now):
                 return self._res(True, "hit", apex_alt, apex_x, eng, st, V,

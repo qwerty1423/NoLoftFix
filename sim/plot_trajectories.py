@@ -1,123 +1,5 @@
 #!/usr/bin/env python3
-"""
-plot_trajectories.py -- look at the planned loft trajectories without flying them.
 
-    cd sim
-
-    # every solved cell, as a grid of altitude-vs-downrange curves
-    python3 plot_trajectories.py --runs runs/scythe
-
-    # the table the mod actually loads
-    python3 plot_trajectories.py --table ../mod/Tables/loft_table_scythe.json
-
-    # slice it: fix two axes, sweep the rest
-    python3 plot_trajectories.py --table ../mod/Tables/loft_table_scythe.json \
-        --fix launch_alt_m=9000 --fix launch_speed_ms=320 --fix target_alt_m=200
-
-    # the health of the whole grid at once: apex, terminal speed, fit error, TOF
-    python3 plot_trajectories.py --runs runs/scythe --overview --colour launch_alt_m
-
-    # one cell in full, including V / gamma / alpha when the solution was stored
-    python3 plot_trajectories.py --runs runs/scythe --cell 75_4000_320_200_0
-
-    # what the missiles actually did, from a game log
-    python3 plot_trajectories.py --flight ../../uploads/log5normal.txt
-
-    # the cells --check is unhappy with, and the cells the launch cannot reach
-    python3 plot_trajectories.py --runs runs/scythe --health woven --health infeasible
-    python3 plot_trajectories.py --table ../mod/Tables/loft_table_scythe.json --unreachable
-
-    # a page to leave open in a browser tab: hover a line for its cell, click the
-    # headings to sort, type to filter
-    python3 plot_trajectories.py --runs runs/scythe --html plan.html --html-interactive
-
-WHY THIS EXISTS
-
-The optimiser only ever hands back `poly_a` plus six diagnostics, so the only way
-to see what a cell is going to make the missile do was to fly it. A profile that
-is wrong is usually wrong in a way that is obvious on a plot -- a flat cell, a
-poly that dips below the launch altitude, ringing near the endpoints, an apex
-later than the target, two neighbouring cells with incompatible shapes -- and all
-of that is invisible in the table JSON and in `--status`. This renders it.
-
-WHAT IT KNOWS ABOUT A CELL
-
-Everything the simulator records, not just the six numbers the polynomial needs:
-`--check`'s verdict (ok / woven / infeasible), whether the solve satisfied the
-floors it was given and which one it did not, the lowest speed and lowest
-available load factor anywhere on the path, the recorded/re-integrated speed
-ratio, whether the flight time ended on its duration bound, and -- on a table
-merged with an envelope run -- the maximum range that launch condition reached.
-Those change what a plot should say, so:
-
-  * line style is the verdict (solid ok, dashed woven, dotted infeasible), and
-    the arrival-end marker is hollow for a cell with no verdict or one beyond
-    the envelope;
-  * --overview grows panels for the path minima and the defect ratio when the
-    cells have them, and falls back to the original four panels when they do not;
-  * --list carries health, V_min, nav_g, defect and the envelope mark;
-  * --cell shows the audit result and the ratio on the trajectory panel itself.
-
-The filters follow the same fields: --health, --reachable/--unreachable,
---min-v-along, --max-defect.
-
-WHAT IT PLOTS
-
-"Family" mode (the default) is altitude against downrange, one line per cell:
-one panel per (rows x cols) pair of grid axes, one line per value of a third
-axis. Which axes those are is inferred from what you left free, and printed in
-the title, so there is no hidden state. Fix axes with `--fix axis=value` until
-what is left is what you want to look at; override the choice with `--rows`,
-`--cols` and `--sweep`.
-
-`--overview` is the health check: apex gain, terminal speed, fit RMSE and TOF,
-each against range, all cells, coloured by whichever axis you nominate. A flat
-cell (apex == launch altitude) is drawn as a red cross everywhere because that
-is the failure that looks most like success in the JSON: it fits its own flat
-answer exactly, so it reports the *lowest* fit RMSE in the table.
-
-`--cell KEY` is one cell, plus the stored Dymos solution when there is one
-(`V`, `gamma`, `alpha` and the polynomial residual). Cells solved before
-`grid_dymos.py --store-solutions` existed only have the polynomial.
-
-`--flight LOG` is a different axis of the same problem: it parses the mod's own
-`[flight]` lines out of a BepInEx log and plots what the missile did against
-what it was told to do (`ref`), the tracking error, and speed, per round. The
-`[flight]` line carries exactly these numbers so the comparison is possible; see
-the flight-telemetry notes in the README.
-
-INPUTS
-
-  --runs DIR     a grid run directory (`runs/<name>`). Attempt files left by
-                 grid_dymos.py --reoptimise are ignored unless --include-attempts.
-  --table FILE   a merged table (grid_dymos.py --merge). Repeatable; with
-                 --compare, same-cell lines from two tables are drawn against
-                 each other, which is how a re-optimise run is judged.
-  --runs DIR     a grid run directory (`runs/<name>`), i.e. the per-cell files
-                 before merging. These are the richer source: they can carry the
-                 solved trajectories.
-
-Both are tolerant: a cell with no `poly_a`, a legacy imperial cell from before
-the metric switch, or a JSON file that is not a cell at all is skipped with a
-counted reason rather than a traceback.
-
-OUTPUT
-
-  --save FILE    the figures as PNGs (the family or the overview).
-  --html FILE    one self-contained page: the verdict tiles, the figures as inline
-                 SVG, a sortable/filterable table of every cell, and the cell data
-                 as JSON. No network, no external assets -- it renders offline.
-  --html-interactive
-                 with --html: draw the family plot with plotly instead (hover a
-                 curve for its cell and verdict, click a legend group to isolate a
-                 verdict, zoom). The plotly runtime is inlined, so the page is
-                 still self-contained; without plotly installed it falls back to
-                 the static figure and says so on the page rather than failing.
-
-Requires numpy and matplotlib -- it does NOT import dymos, so it can be run
-on a machine that has never solved anything, against a table copied off the
-machine that did.
-"""
 from __future__ import annotations
 
 import argparse
@@ -131,8 +13,6 @@ from pathlib import Path
 AXES = ["range_km", "launch_alt_m", "launch_speed_ms",
         "target_alt_m", "target_speed_ms"]
 
-# Axis order == "which is worth seeing vary first". Used to choose rows/cols/sweep
-# when the user has not said, and to lay out the overview.
 ORDER = list(AXES)
 
 LABEL = {
@@ -147,7 +27,6 @@ SHORT = {
     "target_alt_m": "ht", "target_speed_ms": "Vt",
 }
 
-# Accepted spellings for --fix / --rows / --cols / --sweep / --colour.
 ALIAS = {}
 for _a in AXES:
     ALIAS[_a] = _a
@@ -161,7 +40,6 @@ ALIAS.update({
     "target_speed": "target_speed_ms", "vt": "target_speed_ms",
 })
 
-# Legacy imperial -> metric, same factors as grid_dymos.LEGACY_AXES.
 LEGACY = {
     "range_nmi": ("range_km", 1.852),
     "launch_alt_ft": ("launch_alt_m", 0.3048),
@@ -170,19 +48,12 @@ LEGACY = {
     "target_kt": ("target_speed_ms", 0.514444),
 }
 
-# Panels per column before the grid axis is wrapped across. Six rows of panels is
-# about as tall as a figure can be and still be read without scrolling.
 PANEL_ROWS = 6
 
-# The mod's own thresholds, drawn as reference lines in --overview.
-SELF_DESTRUCT_SPEED = 200.0     # ARHSeeker.selfDestructAtSpeed
-DEFAULT_MIN_TERMINAL = 800.0    # General/MinCellTerminalSpeedMs in the README
-DEFAULT_SPEED_TOL = 0.25        # grid_dymos.py --speed-tol: re-integration tolerance
+SELF_DESTRUCT_SPEED = 200.0
+DEFAULT_MIN_TERMINAL = 800.0
+DEFAULT_SPEED_TOL = 0.25
 
-# The verdicts grid_dymos.py --check writes into a cell (`health`), plus "unknown"
-# for a cell recorded before that field existed. Anything drawn per cell carries
-# this, because the difference between an ok cell and a woven one is the difference
-# between a trajectory worth flying and one that is a stall the optimiser escaped.
 HEALTH_STATES = ("ok", "woven", "infeasible", "unverified")
 STATUS_ORDER = HEALTH_STATES + ("unknown",)
 STATUS_LINE = {
@@ -198,13 +69,8 @@ STATUS_NOTE = {"ok": "", "woven": "WOVEN", "infeasible": "INFEASIBLE",
                "unverified": "unverified", "unknown": ""}
 
 
-# --------------------------------------------------------------------------
-# cells
-# --------------------------------------------------------------------------
 @dataclass
 class Cell:
-    """One solved grid cell, whatever it was read from."""
-
     coords: dict
     poly: list
     meta: dict = field(default_factory=dict)
@@ -212,7 +78,6 @@ class Cell:
     source: str = ""
     key: str = ""
 
-    # --- derived ---------------------------------------------------------
     @property
     def xf(self) -> float:
         return float(self.coords.get("range_km", 0.0)) * 1000.0
@@ -253,12 +118,6 @@ class Cell:
     def converged(self) -> bool:
         return bool(self.meta.get("converged", False))
 
-    # --- what --check decided, and what the solve measured -----------------
-    #
-    # All of these are optional: a cell recorded before the field existed reads
-    # as None/nan, and every consumer has to say so rather than invent a value.
-    # That is the difference between "this cell is fine" and "nobody checked
-    # this cell", which on a table merged from several runs is a real one.
     @property
     def health(self) -> str | None:
         h = self.meta.get("health")
@@ -270,8 +129,6 @@ class Cell:
 
     @property
     def feasible(self) -> bool | None:
-        """Did the solve satisfy the constraint floors it was given? None = the
-        cell predates the audit, which is not the same answer as True."""
         f = self.meta.get("feasible")
         return None if f is None else bool(f)
 
@@ -285,8 +142,6 @@ class Cell:
 
     @property
     def violation(self) -> str | None:
-        """Why the cell is infeasible, as far as the cell knows: the solver's own
-        message for an audit failure, or the health detail's text."""
         v = self.meta.get("violation")
         if isinstance(v, dict):
             v = _get(v, "violation", "text", "reason")
@@ -294,21 +149,14 @@ class Cell:
 
     @property
     def defect(self) -> float:
-        """Recorded arrival speed / the speed re-integrating its own alpha history
-        produces. 1.0 means the two agree; this is what --check compares against
-        --speed-tol, and it is recorded even when the trajectory is gone."""
         return _fnum(self.meta.get("defect_ratio"))
 
     @property
     def v_min(self) -> float:
-        """Lowest speed anywhere on the path, as measured by the solve's audit --
-        whether or not a floor was set. Below SELF_DESTRUCT_SPEED the game loses
-        the missile after t=2s, so this is the number that rule is about."""
         return _fnum(self.meta.get("v_min_ms"))
 
     @property
     def nav_min(self) -> float:
-        """Lowest load factor the airframe could pull anywhere on the path, in g."""
         return _fnum(self.meta.get("nav_min_g"))
 
     @property
@@ -321,15 +169,11 @@ class Cell:
 
     @property
     def t_bound(self) -> str | None:
-        """"lower"/"upper" when the flight time ended on its duration box, i.e.
-        the answer is the box's rather than the optimiser's. None = free."""
         b = self.meta.get("t_bound")
         return str(b) if b else None
 
     @property
     def exp_max_range(self) -> float:
-        """Maximum range the envelope solve reached for this launch condition, if
-        an --envelope run went with this table."""
         return _fnum(self.meta.get("exp_max_range_km"))
 
     @property
@@ -339,7 +183,6 @@ class Cell:
 
     @property
     def beyond_envelope(self) -> bool:
-        """Known to be outside the reachable set: not a slow shot, not a shot."""
         return self.reachable is False
 
     @property
@@ -355,15 +198,9 @@ class Cell:
 
     @property
     def flat(self) -> bool:
-        # """Never lofted: apex is the launch altitude."""
-        # return abs(self.apex_gain) < 1.0
-
-        # unnecessary.
         return False
 
     def alt(self, xi):
-        """h(xi), Horner. Matches LoftCell.AltitudeAt so a plot cannot disagree
-        with what the mod computes."""
         c = self.poly
         acc = c[-1]
         for k in range(len(c) - 2, -1, -1):
@@ -379,15 +216,12 @@ class Cell:
         return self.coords.get(axis)
 
     def short(self) -> str:
-        """One line for a legend or a log: the axes that matter, with units."""
         return (f"{self.coords['range_km']:.0f}km "
                 f"h0={self.coords['launch_alt_m']:.0f} "
                 f"V0={self.coords['launch_speed_ms']:.0f} "
                 f"ht={self.coords['target_alt_m']:.0f}")
 
     def flags(self) -> str:
-        """Terse per-cell notes for --list and the HTML table. Ordered worst-first
-        so a glance at a padded column is enough."""
         f = []
         if self.status == "infeasible":
             f.append("INFEASIBLE")
@@ -427,12 +261,6 @@ def _get(d: dict, *names, default=None):
 
 
 def cell_from_json(obj: dict, source: str, key: str = "") -> Cell | None:
-    """Build a Cell, or None with a reason if the record is not usable.
-
-    Deliberately mirrors the mod's own tolerance: legacy imperial keys are
-    converted (LoftCell.Normalise), and a cell with no polynomial is skipped --
-    that is the only field the runtime cannot do without.
-    """
     if not isinstance(obj, dict):
         return None
     coords: dict = {}
@@ -460,10 +288,6 @@ def cell_from_json(obj: dict, source: str, key: str = "") -> Cell | None:
     if not all(math.isfinite(v) for v in poly):
         return None
 
-    # Everything the simulator records per cell is read in, not just the six
-    # numbers the plotter was first written against: --check's verdict, the
-    # solve's own audit of its floors, the duration-bound flag and the envelope
-    # marks all change what a plot should say about a cell.
     meta = {k: obj[k] for k in
             ("apex_alt_m", "apex_downrange_m", "terminal_speed_ms", "tof_s",
              "fit_rmse_m", "converged", "maxiter", "_elapsed_s", "_attempts",
@@ -480,13 +304,6 @@ def cell_from_json(obj: dict, source: str, key: str = "") -> Cell | None:
             sol = None
 
     if not key or key.startswith("#"):
-        # Prefer the cell's own _key, else derive it from the axes exactly the way
-        # grid_dymos.py does (AXIS_ORDER joined with "_", %g formatting). A merged
-        # table does not carry _key -- --merge drops it -- so without this a table
-        # could only be addressed by position (#12), which changes the moment the
-        # file is regenerated, and which disagreed with the key the same cell has
-        # in runs/<name>/cells/. Now `--cell 75_4000_320_200_0` means the same
-        # thing for a table and for a run directory.
         derived = "_".join(f"{coords[a]:g}" for a in AXES)
         key = obj.get("_key") or derived
     meta.setdefault("_index", key if key.startswith("#") else None)
@@ -494,7 +311,6 @@ def cell_from_json(obj: dict, source: str, key: str = "") -> Cell | None:
 
 
 def load_table(path: Path, label: str | None = None) -> tuple[list[Cell], list[str]]:
-    """Read a merged table. Returns (cells, notes) -- notes are for the user."""
     notes: list[str] = []
     try:
         d = json.loads(path.read_text())
@@ -522,14 +338,6 @@ ATTEMPT_RE = re.compile(r"\.attempt\d+$")
 
 
 def load_runs(root: Path, include_attempts: bool = False) -> tuple[list[Cell], list[str]]:
-    """Read runs/<name>/cells/*.json, the pre-merge grid output.
-
-    `--reoptimise` leaves every attempt it made on disk, as <key>.attempt<N>.json,
-    next to the winner <key>.json. They are the same cell, so counting them as
-    more cells would make every layer of a family plot repeat itself; they are
-    skipped unless --include-attempts asks for them, which is how you look at
-    the spread the optimiser landed in.
-    """
     notes: list[str] = []
     cells_dir = root / "cells" if (root / "cells").is_dir() else root
     if not cells_dir.is_dir():
@@ -565,9 +373,6 @@ def load_runs(root: Path, include_attempts: bool = False) -> tuple[list[Cell], l
     return cells, notes
 
 
-# --------------------------------------------------------------------------
-# selection
-# --------------------------------------------------------------------------
 def resolve_axis(name: str) -> str:
     a = ALIAS.get(name.strip().lower())
     if a is None:
@@ -595,10 +400,6 @@ def matches(value: float, want: float, tol: float) -> bool:
 
 
 def select(cells: list[Cell], args) -> list[Cell]:
-    """Apply --fix and the filters. Filters that ask about a field a cell does not
-    have exclude it, and the count of those exclusions is reported: silently
-    dropping the unchecked half of a mixed table would read as "nothing to see".
-    """
     fix = parse_fix(args.fix)
     want_health = set(args.health or [])
     dropped: dict[str, int] = {}
@@ -649,18 +450,13 @@ def values_of(cells: list[Cell], axis: str) -> list[float]:
 
 
 def free_axes(cells: list[Cell], cut: int = 1) -> list[str]:
-    """Axes with more than `cut` distinct value in the current selection, in
-    ORDER, i.e. most interesting first."""
     return [a for a in ORDER if len(values_of(cells, a)) > cut]
 
 
-# --------------------------------------------------------------------------
-# plotting
-# --------------------------------------------------------------------------
 def import_mpl(show: bool):
     try:
         import matplotlib
-    except Exception as e:  # pragma: no cover - environment problem
+    except Exception as e:
         raise SystemExit(f"matplotlib is required for plotting ({e}). "
                          f"pip install -r requirements.txt")
     if not show:
@@ -670,8 +466,6 @@ def import_mpl(show: bool):
         "figure.dpi": 120,
         "figure.facecolor": "white",
         "axes.grid": True,
-        # A grid is there to read a value off, not to compete with the data: light,
-        # thin and behind everything.
         "grid.color": "#d8dde3",
         "grid.linewidth": 0.6,
         "grid.alpha": 0.9,
@@ -694,21 +488,12 @@ def import_mpl(show: bool):
 
 
 def curve_label(c: Cell, sweep_axis: str | None) -> str:
-    """Legend text for one curve.
-
-    Deliberately just the sweep VALUE: the legend is deduplicated across panels,
-    so anything cell-specific in here (terminal speed, FLAT, convergence) would
-    make every panel a new entry and produce a 480-line legend. Those go on the
-    curve as an annotation instead.
-    """
     if sweep_axis is None:
         return c.short()
     return f"{SHORT[sweep_axis]}={c.coord(sweep_axis):g}"
 
 
 def curve_annotation(c: Cell) -> str:
-    """Short per-curve note drawn on the line: the number you are looking for,
-    plus whatever makes this curve different from its neighbours."""
     extra = []
     if c.v_term == c.v_term:
         extra.append(f"{c.v_term:.0f}")
@@ -725,24 +510,6 @@ def curve_annotation(c: Cell) -> str:
 
 
 def label_curves(ax, curves, min_gap_frac: float = 0.05):
-    """Annotate each curve in a panel, without the labels landing on each other.
-
-    Every curve in a panel ends at the same aimpoint -- that is what a cell is --
-    so labelling them at their ends stacks them on one spot by construction. The
-    earlier version did exactly that and printed three labels on top of each
-    other, which reads as one garbled string ("3489F nc").
-
-    So each label goes where its own curve is FURTHEST from every other curve in
-    the panel, weighted toward the end of the trajectory, which is where a
-    reader looks for it anyway. Curves that are about to converge are avoided,
-    which is the whole point: a label is only useful where you can tell which
-    line it belongs to. A faint white box keeps it legible over the grid, and
-    labels that still land close together are pushed apart vertically.
-
-    `curves` is [(xs, ys, text, colour)] in plot order; the ys arrays must share
-    a length (they are all sampled on the same xi grid), which is what makes
-    "the point where this curve is most separated" comparable between curves.
-    """
     import numpy as np
     curves = [c for c in curves if c[2]]
     if not curves:
@@ -755,8 +522,6 @@ def label_curves(ax, curves, min_gap_frac: float = 0.05):
         spots = [(c[0][-1], c[1][-1]) for c in curves]
     else:
         stack = np.array([c[1][:n] for c in curves], dtype=float)
-        # late points are worth more than early ones: a label two thirds along
-        # the trajectory is where you would put it by hand
         weight = 0.4 + np.linspace(0.0, 1.0, n)
         spots = []
         for i, (_xs, ys, _t, _c) in enumerate(curves):
@@ -765,7 +530,6 @@ def label_curves(ax, curves, min_gap_frac: float = 0.05):
             j = int(np.argmax(separation * weight))
             spots.append((_xs[j], ys[j]))
 
-    # push apart anything that is still close, in plot order
     placed = []
     for (x, y), (_xs, _ys, text, colour) in zip(spots, curves):
         pushed = list(placed)
@@ -778,9 +542,6 @@ def label_curves(ax, curves, min_gap_frac: float = 0.05):
                     bbox=dict(fc="white", ec="none", alpha=0.72, pad=0.8))
 
 
-# Okabe-Ito: the standard colour-blind-safe qualitative set. Named so it can be
-# asked for explicitly; "auto" keeps the old behaviour (tab10 up to ten lines,
-# viridis beyond, where a qualitative palette runs out anyway).
 PALETTES = {
     "auto": None,
     "tab10": "tab10",
@@ -793,8 +554,6 @@ SEQUENTIAL = ("viridis", "cividis", "plasma", "magma", "Greys")
 
 
 def colour_for(i: int, n: int, plt, palette: str = "auto"):
-    """Colour for line i of n. `--palette okabe-ito` or `--palette cividis` gives a
-    colour-blind-safe alternative to the default tab10/viridis pair."""
     import numpy as np
     pal = PALETTES.get(palette)
     if isinstance(pal, list):
@@ -807,7 +566,6 @@ def colour_for(i: int, n: int, plt, palette: str = "auto"):
 
 
 def plot_family(cells: list[Cell], args, plt, desc: str):
-    """Altitude vs downrange, one panel per (rows x cols), one line per sweep."""
     if not cells:
         raise SystemExit(
             "nothing to plot: no cells matched. Loosen --fix / --min-* .")
@@ -836,14 +594,6 @@ def plot_family(cells: list[Cell], args, plt, desc: str):
     row_vals = values_of(cells, rows_axis) if rows_axis else [None]
     col_vals = values_of(cells, cols_axis) if cols_axis else [None]
 
-    # Panel cap. Sub-sample the *outer* axis rather than refusing to draw: a 6x6
-    # wall of panels is already unreadable, and the user asked for a glance.
-    #
-    # Sub-sample by even spacing INCLUDING both ends, and say exactly which
-    # values survived. A plain stride (row_vals[::step]) drops the last value of
-    # the axis, which is usually the one you were looking at -- on the Scythe
-    # grid the 400 km row never appeared in a default plot, and the note said
-    # "showing every 2th row", which does not tell you it is missing either.
     def thin(vals, keep):
         n = len(vals)
         if keep < 1 or n <= keep:
@@ -866,10 +616,6 @@ def plot_family(cells: list[Cell], args, plt, desc: str):
               file=sys.stderr)
         row_vals = kept
 
-    # Panel layout. A grid axis with many values (ten ranges is normal) becomes a
-    # column of ten panels, which is a wall rather than a figure, so the panels are
-    # wrapped into at most PANEL_ROWS rows and laid out across instead. Filling is
-    # row-major, so the axis still reads left to right and downwards.
     pairs = [(rv, cv) for rv in row_vals for cv in col_vals]
     if len(pairs) > PANEL_ROWS * max(len(col_vals), 1):
         n_cols = math.ceil(len(pairs) / PANEL_ROWS)
@@ -892,8 +638,6 @@ def plot_family(cells: list[Cell], args, plt, desc: str):
     fig.suptitle(f"planned loft trajectories -- {desc}\n" + " | ".join(where),
                  fontsize=11)
 
-    # Curves are labelled by sweep value only, and the label set is shared across
-    # every panel, so the legend belongs to the figure and not to any one axes.
     legend_handles = {}
     for idx, (rv, cv) in enumerate(pairs):
         ax = axes[idx // n_cols][idx % n_cols]
@@ -906,7 +650,7 @@ def plot_family(cells: list[Cell], args, plt, desc: str):
                 continue
 
             sweep_vals = values_of(sub, sweep_axis) if sweep_axis else [None]
-            # [(xs, ys, text, colour)] -- placed after the axes settle
+
             labels = []
             for si, sv in enumerate(sweep_vals):
                 sel = [c for c in sub if sv is None or matches(
@@ -915,9 +659,7 @@ def plot_family(cells: list[Cell], args, plt, desc: str):
                     continue
                 c = sel[0]
                 lw = 1.8 if sweep_axis else 2.0
-                # The line style carries the verdict: a woven profile and a cell that
-                # does not fly its own claim are the two things a family plot has to
-                # make visible, and colour is already spent on the sweep axis.
+
                 ls = STATUS_LINE[c.status]
                 if c.flat:
                     ls = (0, (4, 1.6, 1, 1.6))
@@ -931,8 +673,7 @@ def plot_family(cells: list[Cell], args, plt, desc: str):
                 (ln,) = ax.plot(xs, ys, color=col, lw=lw, ls=ls, alpha=0.92,
                                 label=curve_label(c, sweep_axis))
                 legend_handles.setdefault(ln.get_label(), ln)
-                # One marker at the arrival end, shaped by the verdict. Hollow means
-                # the cell is beyond the solved envelope or carries no verdict.
+
                 mfc = "none" if (c.beyond_envelope or c.status in (
                     "unverified", "unknown")) else col
                 ax.plot([xs[-1]], [ys[-1]], marker=STATUS_MARKER[c.status], ms=3.6,
@@ -941,8 +682,6 @@ def plot_family(cells: list[Cell], args, plt, desc: str):
                 if args.annotate and len(sweep_vals) <= args.max_legend:
                     labels.append((xs, ys, curve_annotation(c), col))
 
-            # Endpoint reference lines, only when they are constant in this panel.
-            # (before the labels: they set the y limits the labels are placed in)
             if len({round(c.h0) for c in sub}) == 1:
                 ax.axhline(sub[0].h0 / 1000.0, color="0.55", lw=0.8, ls=":")
             if len({round(c.ht) for c in sub}) == 1 and not args.normalised:
@@ -969,8 +708,7 @@ def plot_family(cells: list[Cell], args, plt, desc: str):
             ax.set_xlabel(
                 "range along launch axis (%)" if args.normalised else "downrange (km)")
             ax.set_ylabel("altitude (km)")
-    # Decode the encodings in the legend, once, for the whole figure: which line
-    # style is which verdict, and what a hollow marker means.
+
     from matplotlib.lines import Line2D
     present = {c.status for c in cells}
     for s in STATUS_ORDER:
@@ -1000,15 +738,6 @@ def plot_family(cells: list[Cell], args, plt, desc: str):
 
 
 def overview_panels(cells: list[Cell]) -> list[tuple[str, list, bool]]:
-    """The health panels, in reading order, omitting any the data cannot fill.
-
-    A panel is only shown when at least one cell carries the number: the path
-    minima (`v_min_ms`, `nav_min_g`), the defect ratio and the envelope marks are
-    all optional, and a panel of NaNs would suggest the grid is broken rather
-    than that it was solved before those fields existed. The four numbers every
-    cell has -- apex, terminal speed, fit error, time of flight -- are kept even
-    when empty so the layout does not change shape between tables.
-    """
     cands = [
         ("apex gain (m)", [c.apex_gain for c in cells], False, True),
         ("terminal speed (m/s)", [c.v_term for c in cells], False, True),
@@ -1031,14 +760,6 @@ def overview_panels(cells: list[Cell]) -> list[tuple[str, list, bool]]:
 
 
 def plot_overview(cells: list[Cell], args, plt, desc: str):
-    """Grid health: every number a cell records, against range, with the verdict.
-
-    This is the panel to look at before merging. It answers the questions the
-    summary line raises -- which cells are flat, which are beyond what the
-    launch can reach, which do not survive re-integration, and whether the path
-    minima sit below the game's own limits -- in one place, and it degrades to
-    the four original panels on a table that predates those fields.
-    """
     if not cells:
         raise SystemExit("nothing to plot: no cells matched.")
     import numpy as np
@@ -1049,9 +770,6 @@ def plot_overview(cells: list[Cell], args, plt, desc: str):
     xr = np.array([c.coord("range_km") for c in cells])
     panels = overview_panels(cells)
 
-    # As many columns as the panels need and no more: 7 panels in a 3x3 leave two
-    # blank cells and a lot of dead width, and at 3.6in per panel the figure is
-    # still wide enough to read once saved.
     n = len(panels)
     ncols = min(3, n)
     nrows = -(-n // ncols)
@@ -1083,8 +801,6 @@ def plot_overview(cells: list[Cell], args, plt, desc: str):
             cmap = args.palette if args.palette in SEQUENTIAL else "viridis"
             sc = ax.scatter(xr[m], y[m], c=cv[m], cmap=cmap, s=18, edgecolors="none",
                             zorder=2)
-        # Cells outside the reachable set are drawn hollow on top, whatever their
-        # verdict: no verdict applies to a shot the launcher cannot reach.
         m = unreach & okrange
         if np.any(m):
             ax.scatter(xr[m], y[m], marker="s", s=44, facecolors="none", edgecolors="crimson",
@@ -1093,13 +809,10 @@ def plot_overview(cells: list[Cell], args, plt, desc: str):
         ax.set_ylabel(name)
         if logy:
             ax.set_yscale("log")
-    # Colour bar on the last panel of the first row: the mapping is the same for
-    # every panel, so repeating it per panel would be six identical bars.
     if sc is not None:
         fig.colorbar(
             sc, ax=axlist, label=LABEL[colour_axis], pad=0.015, fraction=0.02)
 
-    # Reference lines and thresholds, per panel that has one.
     by_name = {name: ax for (name, _v, _l), ax in zip(panels, axlist)}
     ax = by_name.get("terminal speed (m/s)")
     if ax is not None:
@@ -1156,7 +869,6 @@ def plot_overview(cells: list[Cell], args, plt, desc: str):
 
 
 def plot_detail(cells: list[Cell], args, plt, desc: str):
-    """One cell: the polynomial, and the stored solution if there is one."""
     import numpy as np
     if not cells:
         raise SystemExit("no cell matched --cell")
@@ -1189,17 +901,12 @@ def plot_detail(cells: list[Cell], args, plt, desc: str):
             marker="*", ms=9, color="orange", label="apex (recorded)")
     ax.set_xlabel("downrange (km)")
     ax.set_ylabel("altitude (km)")
-    # Title: what the cell is, then the numbers, on two lines. Anything long and
-    # conditional (the verdict, the bound, the envelope) goes in the facts box, so
-    # the title cannot grow into the panels above it.
+
     ax.set_title(f"{c.source} {c.key}   {c.short()}\n"
                  f"V_term {c.v_term:.0f} m/s   tof {c.tof:.1f} s   "
                  f"apex {c.apex:.0f} m   rmse {c.rmse:.1f} m", fontsize=8.5)
     ax.legend(loc="best", framealpha=0.92, fontsize=7.5)
 
-    # Everything the cell recorded about whether this trajectory is flyable, in
-    # the corner of the panel that shows the trajectory itself. A plot of a cell
-    # that does not survive re-integration should say so on its face.
     facts = []
     verdict = {"infeasible": "INFEASIBLE", "woven": "woven profile",
                "unknown": "no verdict recorded"}.get(c.status, "")
@@ -1234,9 +941,6 @@ def plot_detail(cells: list[Cell], args, plt, desc: str):
                 bbox=dict(fc="white", ec="0.85", alpha=0.9, pad=2.2))
 
     if has_sol and xs.size and xs.size == hs.size:
-        # poly - solution, at the solution nodes. `h` is the dense 200-point
-        # curve and must not be used here: the arrays are different lengths and
-        # the residual is only defined where the solver actually evaluated.
         poly_at_nodes = np.array(
             [c.alt(x / c.xf) if c.xf > 0 else 0.0 for x in xs])
         res = poly_at_nodes - hs
@@ -1256,9 +960,7 @@ def plot_detail(cells: list[Cell], args, plt, desc: str):
             ax.plot(xs[:vv.size] / 1000.0, vv, color="C2", lw=1.6)
             ax.axhline(SELF_DESTRUCT_SPEED, color="crimson", ls=":", lw=0.9,
                        label=f"self-destruct {SELF_DESTRUCT_SPEED:.0f}")
-            # The audit's own minimum, drawn where it happened: this is the number
-            # the path speed floor was checked against, and on a cell solved
-            # without a floor it is the number to choose one from.
+
             if c.v_min == c.v_min and vv.size:
                 j = int(np.nanargmin(vv))
                 ax.plot([xs[j] / 1000.0], [c.v_min], marker="v", ms=6, color="crimson",
@@ -1272,11 +974,7 @@ def plot_detail(cells: list[Cell], args, plt, desc: str):
                 y = np.asarray(sol_series(c.sol, nm) or [], dtype=float)
                 if not y.size:
                     continue
-                # gamma is a state and shares the node grid with x; alpha is usually
-                # a control, and a Radau control has one node fewer than the states
-                # it steers. Plotting it against the state nodes was a length
-                # mismatch (37 vs 36) and an exception; the control sits at the
-                # midpoint of the interval it applies over, so put it there.
+
                 if len(y) == len(xs):
                     xv = xs
                 elif len(y) == len(xs) - 1:
@@ -1293,32 +991,12 @@ def plot_detail(cells: list[Cell], args, plt, desc: str):
     return fig
 
 
-# --------------------------------------------------------------------------
-# flight logs
-# --------------------------------------------------------------------------
 FLIGHT_RE = re.compile(r"(M\d+)\s+\[flight\]\s+(.*)$")
 KV_RE = re.compile(
     r"([A-Za-z_][A-Za-z_0-9]*)=(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)")
 
 
 def parse_flight_log(path: Path) -> dict:
-    """{round id: {field: [values]}} from the mod's own [flight] lines.
-
-    The line is:
-        M1 [flight] t=1.0s s=0.006 alt=5969 ref=6294 B=344 hT=5271/5271
-           xf=63.8/66.3km v=478 d=1435 err=326 pip=1 cell=67km | cmd=45.4 act=11.3 ref=39.3 deg
-
-    The line has two sections separated by `|`: the state, and the slope command
-    loop. Their key names overlap -- `ref` is a reference ALTITUDE in the first and
-    a reference ANGLE in the second -- so the second section's keys are prefixed
-    `slope_`. Without the split, `ref` collected twice as many values as the other
-    fields, altitudes and degrees interleaved, which is why `--flight` raised a
-    length mismatch on every real log.
-
-    Fields that carry a pair (hT=live/lagged, xf=live/lagged) keep the first number,
-    which is the live one; the lagged one is only interesting when diagnosing the lag
-    itself, and the pair would otherwise be ambiguous here.
-    """
     rounds: dict[str, dict] = {}
     with path.open(errors="replace") as fh:
         for line in fh:
@@ -1336,9 +1014,6 @@ def parse_flight_log(path: Path) -> dict:
 
 
 def _paired(d: dict, xkey: str, ykey: str, scale: float = 1.0):
-    """Two series from one round, trimmed to the shorter. A truncated or
-    mid-write log line can leave the fields out of step, and a plot is not the
-    place to find that out."""
     y = d.get(ykey) or []
     x = d.get(xkey) or []
     n = min(len(x), len(y))
@@ -1346,14 +1021,6 @@ def _paired(d: dict, xkey: str, ykey: str, scale: float = 1.0):
 
 
 def plot_flight(logs: list[Path], args, plt):
-    """What the missiles actually did, from the mod's own log lines.
-
-    Four panels: altitude against the reference it was commanded to follow, the
-    tracking error, the slope loop's command against what the airframe achieved, and
-    speed with the game's own limits marked. The slope panel exists because the log
-    carries it and it is where a tracking problem shows up as the command running
-    away from the achieved value rather than as an altitude error.
-    """
     fig, axes = plt.subplots(4, 1, figsize=(
         10, 11.5), sharex=False, layout="constrained")
     shown = 0
@@ -1368,7 +1035,7 @@ def plot_flight(logs: list[Path], args, plt):
                 continue
             shown += 1
             lab = f"{path.stem} {rid}"
-            # xf is logged in km and s is the fraction of it: s*xf is km downrange
+
             x = [si * xi for si, xi in zip(d.get("s", []), d.get("xf", []))]
             ax = axes[0]
             ax.plot(x, [v / 1000.0 for v in d.get("alt", [])],
@@ -1409,20 +1076,11 @@ def plot_flight(logs: list[Path], args, plt):
     return fig
 
 
-# --------------------------------------------------------------------------
-# --list
-# --------------------------------------------------------------------------
 SHORT_STATUS = {"ok": "ok", "woven": "wov", "infeasible": "inf",
                 "unverified": "?", "unknown": "-"}
 
 
 def cmd_list(cells: list[Cell], args):
-    """The table, including what --check would say and what the solve measured.
-
-    Columns are in the order the questions come in: where the cell is, what it
-    claims, whether the claim flies, and what the limits say about it. A dash
-    means the field is not in the file, which is not the same as a pass.
-    """
     rows = sorted(cells, key=lambda c: (c.coord("range_km"), c.coord("launch_alt_m"),
                                         c.coord("launch_speed_ms"), c.coord("target_alt_m")))
 
@@ -1450,11 +1108,7 @@ def cmd_list(cells: list[Cell], args):
               f"load-time filter")
 
 
-# --------------------------------------------------------------------------
-# --html
-# --------------------------------------------------------------------------
 def fig_to_svg(fig, plt) -> str:
-    """One figure as an inline SVG string, sized to shrink inside its card."""
     from io import StringIO
     buf = StringIO()
     fig.savefig(buf, format="svg", bbox_inches="tight")
@@ -1466,8 +1120,6 @@ def fig_to_svg(fig, plt) -> str:
 
 
 def _json_safe(v):
-    """Anything json.dumps would choke on, made safe: NaN and Infinity are not
-    JSON, and neither is a numpy scalar or array."""
     if isinstance(v, float):
         return v if math.isfinite(v) else None
     if isinstance(v, (list, tuple)):
@@ -1476,60 +1128,43 @@ def _json_safe(v):
         return {str(k): _json_safe(x) for k, x in v.items()}
     if isinstance(v, (int, str, bool)) or v is None:
         return v
-    try:                                        # numpy scalar / array
+    try:
         import numpy as np
         if isinstance(v, np.ndarray):
             return [_json_safe(x) for x in v.tolist()]
         if isinstance(v, np.generic):
             return _json_safe(v.item())
-    except Exception:                           # noqa: BLE001
+    except Exception:
         pass
     return str(v)
 
 
 def sol_series(sol: dict | None, key: str):
-    """One field of a stored trajectory as a list of floats, or None.
-
-    `_sol` is not uniform: `x`, `h`, `V`, `gamma`, `mass` and `alpha` are arrays
-    over the node grid, but `tof` is a single number, and the arrays differ in
-    length because a Radau control has one node fewer than the states it steers.
-    Anything that reads a field has to go through here rather than assume a list --
-    assuming a list is what raised `TypeError: 'float' object is not iterable` on
-    every cell with a stored solution the first time this ran on a real run.
-    """
     if not isinstance(sol, dict) or key not in sol:
         return None
     v = sol[key]
     if isinstance(v, (int, float)):
-        return None                             # a scalar: not a series
+        return None
     if isinstance(v, (list, tuple)):
         try:
             return [float(x) for x in v]
         except (TypeError, ValueError):
             return None
-    try:                                        # numpy array
+    try:
         import numpy as np
         arr = np.asarray(v, dtype=float).ravel()
-    except Exception:                           # noqa: BLE001
+    except Exception:
         return None
     return list(arr) if arr.size > 1 else None
 
 
 def sol_scalar(sol: dict | None, key: str) -> float:
-    """The scalar fields of a stored trajectory (`tof`), nan when absent."""
     if not isinstance(sol, dict) or key not in sol:
         return float("nan")
     return _fnum(sol[key])
 
 
 def cells_json(cells: list[Cell], with_curves: bool = False) -> str:
-    """The cells as JSON, embedded in the HTML page: every field the table shows,
-    plus the polynomial (and the stored trajectory when there is one).
-
-    `with_curves` adds the sampled altitude curve. It is off by default: a merged
-    table of 480 cells would carry 480 x 120 points twice over and turn a page that
-    should be a few hundred kB into megabytes, and anything downstream can eval the
-    polynomial it already has."""
     import numpy as np
     rows = []
     keys = [("key", lambda c: c.key), ("source", lambda c: c.source),
@@ -1651,12 +1286,6 @@ def html_summary_tiles(cells: list[Cell]) -> str:
 
 
 def html_table(cells: list[Cell], table_id: str = "cells") -> str:
-    """Sortable, filterable table of everything the page knows about each cell.
-
-    Sorting and filtering happen in the page, which is part of why the page is HTML:
-    the table carries its own data and needs no server. It is built from the same
-    Cell objects as the figures, so a row and a curve cannot disagree.
-    """
     cols = [("key", "key", "s"), ("range_km", "range", "n"), ("launch_alt_m", "h0", "n"),
             ("launch_speed_ms", "V0", "n"), ("target_alt_m", "ht", "n"),
             ("apex", "apex", "n"), ("apex_gain",
@@ -1746,19 +1375,12 @@ def _plotly_version() -> str:
     try:
         import plotly
         return plotly.__version__
-    except Exception:                                # noqa: BLE001
+    except Exception:
         return "?"
 
 
 def plotly_family_div(cells: list[Cell], per_status_cap: int = 60):
-    """The family plot as an interactive plotly figure, self-contained.
 
-    A static family plot answers "what shape are these trajectories"; it cannot
-    answer "which line is that". Here every line carries its key and verdict on
-    hover, cells can be hidden by clicking a legend group, and the axes zoom. The
-    lines are capped per verdict and the cap is stated in the text above the plot
-    rather than applied silently.
-    """
     import numpy as np
     import plotly.graph_objects as go
     from plotly.offline import get_plotlyjs
@@ -1805,21 +1427,11 @@ def plotly_family_div(cells: list[Cell], per_status_cap: int = 60):
     fig.update_yaxes(gridcolor="rgba(0,0,0,0.08)")
     div = fig.to_html(include_plotlyjs=False, full_html=False,
                       config={"displaylogo": False, "responsive": True})
-    # The plotly runtime is inlined, not fetched: this page is read on machines
-    # that may never have seen the internet.
     return (f"<script>{get_plotlyjs()}</script>{div}", "; ".join(notes))
 
 
 def write_html(path: Path, figs: list[tuple[str, object]], cells: list[Cell], desc: str, plt,
                args=None):
-    """Self-contained page: no network, no external assets.
-
-    Two flavours. With `--html-interactive` (and plotly installed) the family plot
-    is drawn by plotly and its runtime is inlined, so cells can be hovered, zoomed
-    and grouped by verdict; without it the page is the matplotlib figures as inline
-    SVG -- the same figures as `--save` -- wrapped in a page with the verdict tiles
-    and the sortable cell table. Both flavours embed the cell data as JSON.
-    """
     interactive = bool(getattr(args, "html_interactive", False)
                        ) if args is not None else False
     parts = [
@@ -1838,9 +1450,7 @@ def write_html(path: Path, figs: list[tuple[str, object]], cells: list[Cell], de
             if note:
                 parts.append(f"<div class='note'>{note}</div>")
             parts.append(f"<div class='card'>{div}</div>")
-        except Exception as e:                       # noqa: BLE001 - degrade, never fail
-            # Say it on stderr as well as on the page: a page that silently lost its
-            # interactive plot is easy to miss when the run is going well.
+        except Exception as e:
             print(f"NOTE: --html-interactive could not use plotly "
                   f"({type(e).__name__}: {e}). Install it with `pip install plotly`, or "
                   f"the page keeps the static figures.", file=sys.stderr)
@@ -1849,7 +1459,7 @@ def write_html(path: Path, figs: list[tuple[str, object]], cells: list[Cell], de
             interactive = False
     for title, fig in figs:
         if interactive and title.lower().startswith("trajectories"):
-            continue                                 # the interactive one replaces it
+            continue
         parts.append(
             f"<h2>{title}</h2><div class='card'>{fig_to_svg(fig, plt)}</div>")
     if cells:
@@ -1867,7 +1477,6 @@ def write_html(path: Path, figs: list[tuple[str, object]], cells: list[Cell], de
     print(f"wrote {path}")
 
 
-# --------------------------------------------------------------------------
 def status_counts(cells: list[Cell]) -> dict[str, int]:
     counts = {s: 0 for s in STATUS_ORDER}
     for c in cells:
@@ -1900,9 +1509,6 @@ def describe(cells: list[Cell], args) -> str:
 
 
 def summary(cells: list[Cell]) -> str:
-    """One line that says what is in the selection, worst things named. Printed to
-    stderr on every run and used as the HTML summary, so a plot is never the only
-    place a problem is visible."""
     counts = status_counts(cells)
     bits = [f"{len(cells)} cells"]
     for s in STATUS_ORDER:
@@ -2019,7 +1625,6 @@ def main():
     out.add_argument("--dpi", type=int, default=140)
     args = ap.parse_args()
 
-    # ---- load ----------------------------------------------------------
     cells: list[Cell] = []
     notes: list[str] = []
     if args.table:
@@ -2062,7 +1667,6 @@ def main():
     plt = import_mpl(args.show)
     desc = describe(cells, args)
 
-    # ---- figures -------------------------------------------------------
     figs = []
     if args.cell is not None:
         want = args.cell
@@ -2085,8 +1689,6 @@ def main():
     else:
         multi = args.compare and len(args.table) > 1
         if multi:
-            # one figure per source, plus the combined grid with the sweep axis
-            # forced onto the source so the two families are directly comparable.
             for src in sorted({c.source for c in cells}):
                 sub = [c for c in cells if c.source == src]
                 figs.append((f"{src} ({len(sub)} cells)",
@@ -2105,9 +1707,6 @@ def main():
 
 
 def save_figs(figs, args, plt, cells):
-    # `--html-interactive` alone is a request for a page, so it picks the default
-    # name rather than doing nothing: asking for an interactive page and being told
-    # nothing happened is exactly the confusion this line removes.
     if args.html_interactive and not args.html:
         args.html = "trajectories.html"
         print(f"NOTE: --html-interactive without --html; writing {args.html}. "
