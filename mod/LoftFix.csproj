@@ -20,7 +20,23 @@
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS0649;CS0169</NoWarn>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <Reference>
+      <Private>False</Private>
+    </Reference>
+  </ItemDefinitionGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DebugType>embedded</DebugType>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <Optimize>true</Optimize>
+    <PathMap>$(MSBuildProjectDirectory)=.</PathMap>
+    <EmbedAllSources>false</EmbedAllSources>
+    <EmbedUntrackedSources>false</EmbedUntrackedSources>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <Deterministic>true</Deterministic>
   </PropertyGroup>
 
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
