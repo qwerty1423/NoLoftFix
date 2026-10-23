@@ -73,6 +73,8 @@ public sealed class LoftCell
     public double Fit_rmse_m;
     public bool Converged;
     public string Missile = "";
+    public string health = "";
+    public bool feasible = true;
 
     /// <summary>
     /// <para>
@@ -250,8 +252,10 @@ public sealed class LoftTable
     public int RejectedFlat { get; }
     /// <summary>Cells dropped at load for an implausible terminal speed.</summary>
     public int RejectedSlow { get; }
+    public int RejectedInfeasible { get; }
 
-    public LoftTable(LoftTableFile f, float minTerminalSpeedMs = 0f, bool rejectFlatCells = false)
+    public LoftTable(LoftTableFile f, float minTerminalSpeedMs = 0f,
+                     bool rejectFlatCells = false, bool rejectInfeasibleCells = false)
     {
         List<LoftCell> list = [];
         foreach (LoftCell c in f.Cells ?? [])
@@ -272,6 +276,25 @@ public sealed class LoftTable
                 RejectedSlow++;
                 continue;
             }
+            
+            
+            if (rejectInfeasibleCells && (!c.feasible || string.Equals(c.health, "infeasible", StringComparison.OrdinalIgnoreCase)))
+            {
+                RejectedInfeasible++;
+                continue;
+            }
+
+
+            // Reject corrupt polynomial coefficients regardless of solver metadata
+            bool finite = true;
+            foreach (double coeff in c.Poly_a)
+                if (double.IsNaN(coeff) || double.IsInfinity(coeff))
+                {
+                    finite = false;
+                    break;
+                }
+            if (!finite)
+                continue;
 
             list.Add(c);
         }
@@ -333,92 +356,105 @@ public sealed class LoftTable
                            float targetAltM, float targetSpeedMs,
                            int k, float power, float maxNormDist)
     {
-        if (_cells.Length == 0) { LastReason = "table has no cells"; return null; }
-
-        float[] q = [rangeKm, launchAltM, launchSpeedMs, targetAltM, targetSpeedMs];
-
-        // range matters most: the loft law is a strong function of t_go.
-        float[] w = [2.0f, 1.0f, 0.5f, 1.0f, 0.5f];
-
-        int n = Mathf.Min(k, _cells.Length);
-        (LoftCell cell, float d)[] best = new (LoftCell cell, float d)[n];
-        for (int i = 0; i < n; i++)
+        if (_cells.Length == 0)
         {
-            best[i] = (null, float.MaxValue);
+            LastReason = "table has no cells";
+            return null;
         }
-
-        foreach (LoftCell c in _cells)
+        if (maxNormDist < 0f || float.IsNaN(rangeKm) || float.IsNaN(launchAltM) ||
+            float.IsNaN(launchSpeedMs) || float.IsNaN(targetAltM) || float.IsNaN(targetSpeedMs))
         {
-            float[] v = Coords(c);
-            float dist = 0f;
-            for (int a = 0; a < 5; a++)
-            {
-                if (_degenerate[a])
-                {
-                    continue; // axis carries no information
-                }
-
-                float t = (v[a] - q[a]) / _span[a];
-                dist += w[a] * t * t;
-            }
-            dist = Mathf.Sqrt(dist);
-            if (dist < best[n - 1].d)
-            {
-                best[n - 1] = (c, dist);
-                // insertion sort, keeps `best` ascending without allocating
-                for (int i = n - 1; i > 0 && best[i].d < best[i - 1].d; i--)
-                {
-                    (best[i], best[i - 1]) = (best[i - 1], best[i]);
-                }
-            }
-        }
-
-        LastDistance = best[0].cell == null ? float.NaN : best[0].d;
-        if (best[0].cell == null) { LastReason = "no cells at all"; return null; }
-        if (best[0].d > maxNormDist)
-        {
-            LastReason = $"nearest cell is {best[0].d:F3} away, beyond MaxNormalisedDistance={maxNormDist:F2}";
+            LastReason = "invalid lookup coordinates";
             return null;
         }
 
-        // Exact hit: no blending, avoids IDW noise on a dense grid.
-        if (best[0].d < 1e-4f)
+        int n = Mathf.Clamp(k, 1, _cells.Length);
+        // Store SQUARED distances. This avoids 432 sqrt operations and
+        // per-cell coordinate-array allocations for every missile launch.
+        (LoftCell cell, float dSq)[] best = new (LoftCell cell, float dSq)[n];
+        for (int i = 0; i < n; i++)
+            best[i] = (null, float.MaxValue);
+
+        foreach (LoftCell c in _cells)
         {
-            return best[0].cell;
+            float distSq = 0f;
+            float t;
+            if (!_degenerate[0])
+            {
+                t = (c.Range_km - rangeKm) / _span[0];
+                distSq += 2f * t * t;
+            }
+            if (!_degenerate[1])
+            {
+                t = (c.Launch_alt_m - launchAltM) / _span[1];
+                distSq += t * t;
+            }
+            if (!_degenerate[2])
+            {
+                t = (c.Launch_speed_ms - launchSpeedMs) / _span[2];
+                distSq += 0.5f * t * t;
+            }
+            if (!_degenerate[3])
+            {
+                t = (c.Target_alt_m - targetAltM) / _span[3];
+                distSq += t * t;
+            }
+            if (!_degenerate[4])
+            {
+                t = (c.Target_speed_ms - targetSpeedMs) / _span[4];
+                distSq += 0.5f * t * t;
+            }
+
+            if (distSq >= best[n - 1].dSq)
+                continue;
+            best[n - 1] = (c, distSq);
+            for (int i = n - 1; i > 0 && best[i].dSq < best[i - 1].dSq; i--)
+                (best[i], best[i - 1]) = (best[i - 1], best[i]);
         }
 
+        LastDistance = best[0].cell == null ? float.NaN : Mathf.Sqrt(best[0].dSq);
+        if (best[0].cell == null)
+        {
+            LastReason = "no valid cells";
+            return null;
+        }
+        if (best[0].dSq > maxNormDist * maxNormDist)
+        {
+            LastReason = $"nearest cell is {LastDistance:F3} away, beyond MaxNormalisedDistance={maxNormDist:F2}";
+            return null;
+        }
+        if (best[0].dSq < 1e-8f)
+            return best[0].cell;
+
         int m = 0;
-        double wsum = 0;
+        double wsum = 0.0;
+        double exponent = power * 0.5; // (sqrt(dSq))^power
         for (int i = 0; i < n && best[i].cell != null; i++)
         {
-            double wi = 1.0 / Math.Pow(Math.Max(best[i].d, 1e-6), power);
-            wsum += wi; m++;
+            double wi = 1.0 / Math.Pow(Math.Max(best[i].dSq, 1e-12), exponent);
+            wsum += wi;
+            m++;
         }
-        if (m == 0 || wsum <= 0)
-        {
+        if (m == 0 || wsum <= 0 || double.IsInfinity(wsum) || double.IsNaN(wsum))
             return best[0].cell;
-        }
 
         int order = best[0].cell.Poly_a.Length;
         double[] blended = new double[order];
         for (int i = 0; i < m; i++)
         {
-            double wi = 1.0 / Math.Pow(Math.Max(best[i].d, 1e-6), power) / wsum;
+            double wi = 1.0 / Math.Pow(Math.Max(best[i].dSq, 1e-12), exponent) / wsum;
             double[] pa = best[i].cell.Poly_a;
             for (int j = 0; j < order; j++)
-            {
                 blended[j] += wi * (j < pa.Length ? pa[j] : 0.0);
-            }
         }
-
         return new LoftCell
         {
             Poly_a = blended,
-            Range_km = q[0],
-            Launch_alt_m = q[1],
-            Launch_speed_ms = q[2],
-            Target_alt_m = q[3],
-            Target_speed_ms = q[4],
+            Range_km = rangeKm,
+            Launch_alt_m = launchAltM,
+            Launch_speed_ms = launchSpeedMs,
+            Target_alt_m = targetAltM,
+            Target_speed_ms = targetSpeedMs,
             Missile = "blended",
         };
     }
@@ -431,7 +467,8 @@ public sealed class LoftTable
     /// <param name="rejectFlatCells"></param>
     public static Dictionary<string, LoftTable> LoadAll(string dir, Action<string> log,
                                                         float minTerminalSpeedMs = 0f,
-                                                        bool rejectFlatCells = false)
+                                                        bool rejectFlatCells = false,
+                                                        bool rejectInfeasibleCells = false)
     {
         Dictionary<string, List<LoftCell>> byMissile = new(StringComparer.OrdinalIgnoreCase);
         float lookahead = 3.0f;
@@ -467,7 +504,7 @@ public sealed class LoftTable
 
                 foreach (LoftCell cc in f.Cells)
                 {
-                    cc.Normalise();
+                    cc?.Normalise();
                 }
 
                 l.AddRange(f.Cells);
@@ -483,11 +520,11 @@ public sealed class LoftTable
         foreach (KeyValuePair<string, List<LoftCell>> kv in byMissile)
         {
             LoftTableFile f = new() { Missile = kv.Key, Lookahead_s = lookahead, Cells = [.. kv.Value] };
-            outp[kv.Key] = new LoftTable(f, minTerminalSpeedMs, rejectFlatCells);
+            outp[kv.Key] = new LoftTable(f, minTerminalSpeedMs, rejectFlatCells, rejectInfeasibleCells);
             LoftTable t0 = outp[kv.Key];
             log?.Invoke($"table \"{kv.Key}\": {t0.Count} usable cells" +
-                        (t0.RejectedFlat + t0.RejectedSlow > 0
-                            ? $" (rejected {t0.RejectedFlat} with apex lower than launch altitude, {t0.RejectedSlow} below {minTerminalSpeedMs:F0} m/s terminal)"
+                        (t0.RejectedFlat + t0.RejectedSlow + t0.RejectedInfeasible > 0
+                            ? $" (rejected {t0.RejectedFlat} flat, {t0.RejectedSlow} below {minTerminalSpeedMs:F0} m/s terminal, {t0.RejectedInfeasible} labelled infeasible)"
                             : ""));
         }
         return outp;

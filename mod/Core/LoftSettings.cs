@@ -16,18 +16,35 @@ public sealed class LoftSettings
     private ConfigEntry<bool> _debugDraw;
 
     public bool Enabled => _enabled.Value;
-    public bool Verbose => _verbose.Value;
-    public float MaxNormDistance => _maxNormDistance.Value;
-    public float LookaheadSeconds => _lookaheadSeconds.Value;
-    public float TrackGain => _trackGain.Value;
-    public float MaxTrackAngleDeg => _maxTrackAngleDeg.Value;
-    public float FloorAltM => _floorAltM.Value;
-    public float TargetAltLagRate => _targetAltLagRate.Value;
-    public float FlightLogIntervalS => _flightLogIntervalS.Value;
-    public bool DebugDraw => _debugDraw.Value;
+    public bool Verbose { get; private set; }
+    public float MaxNormDistance { get; private set; }
+    public float LookaheadSeconds { get; private set; }
+    public float TrackGain { get; private set; }
+    public float MaxTrackAngleDeg { get; private set; }
+    public float FloorAltM { get; private set; }
+    public float TargetAltLagRate { get; private set; }
+    public float FlightLogIntervalS { get; private set; }
+    public bool DebugDraw { get; private set; }
 
     public float MinCellTerminalSpeedMs { get; private set; }
     public bool RejectFlatCells { get; private set; }
+    public bool RejectInfeasibleCells { get; private set; }
+
+    private void RefreshRuntime()
+    {
+        Verbose = _verbose.Value;
+        MaxNormDistance = _maxNormDistance.Value;
+        LookaheadSeconds = _lookaheadSeconds.Value;
+        TrackGain = _trackGain.Value;
+        MaxTrackAngleDeg = _maxTrackAngleDeg.Value;
+        FloorAltM = _floorAltM.Value;
+        TargetAltLagRate = _targetAltLagRate.Value;
+        FlightLogIntervalS = _flightLogIntervalS.Value;
+        DebugDraw = _debugDraw.Value;
+    }
+
+    private static void WatchRuntime<T>(ConfigEntry<T> entry, LoftSettings settings) =>
+        entry.SettingChanged += (_, __) => settings.RefreshRuntime();
 
     // constants
     /// <summary>Cells blended when a shot falls between grid points.</summary>
@@ -42,7 +59,6 @@ public sealed class LoftSettings
     /// <summary>How fast the downrange normalisation may chase the live track, m/s.</summary>
     public readonly float XfLagRate = 1500f;
     /// <summary>Cross-fade time constant for a profile shape change, s.</summary>
-    public readonly float BumpFadeS = 1.5f;
     /// <summary>Window in which the launch track may correct Xf0 once, s.</summary>
     public readonly float RebaseWindowS = 6f;
 
@@ -91,6 +107,19 @@ public sealed class LoftSettings
         s.RejectFlatCells = cfg.Bind(gen, "RejectFlatCells", false,
             "This is really dumb, don't enable. Restart required to apply.").Value;
 
+        s.RejectInfeasibleCells = cfg.Bind(gen, "RejectInfeasibleCells", false,
+            "Exclude table cells labelled health is infeasible. Restart required to apply.").Value;
+
+        WatchRuntime(s._verbose, s);
+        WatchRuntime(s._maxNormDistance, s);
+        WatchRuntime(s._lookaheadSeconds, s);
+        WatchRuntime(s._trackGain, s);
+        WatchRuntime(s._maxTrackAngleDeg, s);
+        WatchRuntime(s._floorAltM, s);
+        WatchRuntime(s._targetAltLagRate, s);
+        WatchRuntime(s._flightLogIntervalS, s);
+        WatchRuntime(s._debugDraw, s);
+        s.RefreshRuntime();
         return s;
     }
 }

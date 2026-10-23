@@ -77,7 +77,7 @@ public class Plugin : BaseUnityPlugin
 
             string dir = Path.Combine(
                 Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".", "Tables");
-            Tables = LoftTable.LoadAll(dir, static m => Logger.LogInfo($"{m}"), Settings.MinCellTerminalSpeedMs, Settings.RejectFlatCells);
+            Tables = LoftTable.LoadAll(dir, static m => Logger.LogInfo($"{m}"), Settings.MinCellTerminalSpeedMs, Settings.RejectFlatCells, Settings.RejectInfeasibleCells);
 
             if (Tables.Count == 0)
             {

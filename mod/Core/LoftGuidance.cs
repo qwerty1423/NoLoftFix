@@ -25,7 +25,6 @@ public sealed class LoftState
     /// bump coefficients in use
     /// </summary>
     public double[] Bump = [];
-    public double[] BumpTarget = [];
     /// <summary>
     /// launch altitude, metres
     /// </summary>
@@ -50,7 +49,6 @@ public sealed class LoftState
     /// launch speed the cell was picked at
     /// </summary>
     public float LookupSpeed;
-    public float NextRelookT;
     public bool Engaged;
     public bool NeedLookup;
     public LoftTable Table;
@@ -70,6 +68,7 @@ public sealed class LoftState
     public float LastXfDrift;
     public bool FirstCommandLogged;
     public bool LoftZeroed;
+    public float OriginalLoftAmount;
     /// <summary>
     /// unclamped aimpoint deviation, deg
     /// </summary>
@@ -99,6 +98,23 @@ public static class LoftGuidance
         }
 
         return st;
+    }
+
+    public static bool TryGet(ARHSeeker seeker, out LoftState state) =>
+        States.TryGetValue(seeker, out state);
+
+    public static void RestoreVanilla(ARHSeeker seeker)
+    {
+        if (seeker == null || !TryGet(seeker, out LoftState st))
+            return;
+
+        if (st.LoftZeroed)
+        {
+            seeker.loftAmount = st.OriginalLoftAmount;
+            st.LoftZeroed = false;
+        }
+        st.Engaged = false;
+        st.NeedLookup = false;
     }
 
     private const int MaxEngageReports = 3;
@@ -137,23 +153,31 @@ public static class LoftGuidance
         return Mathf.Sqrt((dx * dx) + (dy * dy) + (dz * dz));
     }
 
+    private static bool IsFinite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
+
     /// <summary>
     /// capture the launch geometry and pick a cell.
     /// </summary>
     public static void OnInitialize(ARHSeeker seeker, LoftTable table,
                                     LoftSettings s, Action<string> log)
     {
-        LoftState st = Get(seeker);
         Missile m = seeker.missile;
         if (m == null || table == null || table.Count == 0)
-        {
             return;
-        }
+        LoftState st = Get(seeker);
 
+        st.OriginalLoftAmount = seeker.loftAmount;
+        st.LoftZeroed = false;
         st.Engaged = false;
-        if (seeker.targetUnit == null)
+        st.NeedLookup = false;
+        st.Cell = null;
+        st.HTInit = true;
+        st.FirstCommandLogged = false;
+        st.PipRefreshes = 0;
+        st.MaxTrackErrM = 0f;
+        if (seeker.targetUnit == null || seeker.targetUnit.disabled || m.targetID.NotValid)
         {
-            if (s_reports++ < MaxEngageReports)
+            if (s_reports++ < MaxEngageReports || s.Verbose)
             {
                 log?.Invoke($"{st.Id} Not engaged: no target unit at initialize.");
             }
@@ -167,9 +191,10 @@ public static class LoftGuidance
         float range0 = FlatDist(st.LaunchPos, pip0);
 
         // Detect placeholder
-        if (Mathf.Abs(range0 - 100000f) < 250f)
+        if (!IsFinite(range0) || !IsFinite(FY(pip0)) ||
+            Mathf.Abs(range0 - 100000f) < 250f)
         {
-            if (s_reports++ < MaxEngageReports)
+            if (s_reports++ < MaxEngageReports || s.Verbose)
             {
                 log?.Invoke($"{st.Id} Not engaged: datalink had no track.");
             }
@@ -184,9 +209,6 @@ public static class LoftGuidance
         st.LastPipX = FX(pip0); st.LastPipZ = FZ(pip0); st.LastPipY = FY(pip0);
         st.Rebased = false;
 
-        float targetAltM = st.HTNow;
-        float rangeKm = st.Xf0 / 1000f;
-
         st.Table = table;
         st.Log = log;
         st.Settings = s;
@@ -200,9 +222,13 @@ public static class LoftGuidance
                         $"MinCellTerminalSpeedMs={s.MinCellTerminalSpeedMs:F0} " +
                         $"RejectFlatCells={s.RejectFlatCells} Enabled={s.Enabled} ");
         }
-        if (m.speed >= MinLookupSpeed)
+        float launchSpeed = m.rb != null
+            ? m.rb.velocity.magnitude
+            : m.speed;
+        
+        if (launchSpeed >= MinLookupSpeed)
         {
-            DoLookup(st, table, s, log, m.speed);
+            DoLookup(seeker, st, table, s, log, launchSpeed);
         }
         else
         {
@@ -229,7 +255,7 @@ public static class LoftGuidance
     public static void MaintainTargetDist(ARHSeeker seeker)
     {
         Missile m = seeker.missile;
-        if (m == null)
+        if (m == null || m.rb == null)
         {
             return;
         }
@@ -245,7 +271,7 @@ public static class LoftGuidance
     /// </summary>
     private const float MinLookupSpeed = 50f;
 
-    private static void DoLookup(LoftState st, LoftTable table, LoftSettings s,
+    private static void DoLookup(ARHSeeker seeker, LoftState st, LoftTable table, LoftSettings s,
                                  Action<string> log, float speed)
     {
         float rangeKm = st.Xf0 / 1000f;
@@ -253,7 +279,7 @@ public static class LoftGuidance
                                s.Neighbours, s.IdwPower, s.MaxNormDistance);
         if (st.Cell == null)
         {
-            if (s_reports++ < MaxEngageReports)
+            if (s_reports++ < MaxEngageReports || s.Verbose)
             {
                 log?.Invoke($"{st.Id} Not engaged at {rangeKm:F1} km / {st.H0Act:F0} m / {speed:F0} m/s " +
                             $"/ tgt {st.HTNow:F0} m -- {table.LastReason}.");
@@ -262,10 +288,15 @@ public static class LoftGuidance
             return;
         }
         st.Bump = st.Cell.BumpCoeffs();
-        st.BumpTarget = st.Bump;
         st.HTLookup = st.HTNow;
         st.LookupSpeed = speed;
         st.Engaged = true;
+        if (!st.LoftZeroed)
+        {
+            seeker.loftAmount = 0f;
+            st.LoftZeroed = true;
+            MaintainTargetDist(seeker);
+        }
         if (s_reports++ < MaxEngageReports || s.Verbose)
         {
             log?.Invoke($"{st.Id} Engaged at {rangeKm:F1} km / {st.H0Act:F0} m / {speed:F0} m/s " +
@@ -284,44 +315,34 @@ public static class LoftGuidance
     /// <param name="log"></param>
     public static bool Override(ARHSeeker seeker, LoftSettings s, Action<string> log)
     {
-        LoftState st = Get(seeker);
-        Missile m = seeker.missile;
-        if (m == null)
-        {
+        if (!TryGet(seeker, out LoftState st))
             return false;
-        }
-
+        
+        Missile m = seeker.missile;
+        if (m == null || m.disabled || m.rb == null)
+            return false;
+        
+        if (m.targetID.NotValid || seeker.targetUnit == null || seeker.targetUnit.disabled || seeker.radarLockEstablished)
+            return false;
+        
         if (st.NeedLookup && st.Table != null && m.speed >= MinLookupSpeed)
         {
             st.NeedLookup = false;
-            DoLookup(st, st.Table, st.Settings ?? s, st.Log ?? log, m.speed);
+            DoLookup(seeker, st, st.Table, st.Settings ?? s, st.Log ?? log, m.speed);
         }
-        if (!st.Engaged || st.Cell == null)
-        {
+        
+        if (!seeker.guidance)
             return false;
-        }
-
+        
+        if (!st.Engaged || st.Cell == null || !st.LoftZeroed)
+            return false;
+        
         float dt = Mathf.Max(Time.fixedDeltaTime, 1e-3f);
         GlobalPosition pos = m.GlobalPosition();
 
-        // knownPos is where the target is; GetLeadVectorWithAccel is
-        // what ARHSeeker.Seek uses to turn that into an intercept point, so
-        // routing through it keeps the lead instead of aiming behind a
-        // crossing target.
-        GlobalPosition pip = seeker.knownPos;
-        try
-        {
-            Vector3 platformVel = m.timeSinceSpawn < 3f
-                ? m.transform.forward * seeker.topSpeed
-                : m.rb.velocity;
-            pip = seeker.knownPos + TargetCalc.GetLeadVectorWithAccel(
-                seeker.knownPos, pos, seeker.knownVel, platformVel,
-                seeker.knownAccel, seeker.maxLead);
-        }
-        catch
-        {
-            // ignored
-        }
+        GlobalPosition pip = m.aimPoint;
+        if (!IsFinite(FX(pip)) || !IsFinite(FY(pip)) || !IsFinite(FZ(pip)))
+            return false;
 
         // check PIP movement
         float pipDx = FX(pip) - st.LastPipX, pipDz = FZ(pip) - st.LastPipZ;
@@ -332,7 +353,7 @@ public static class LoftGuidance
         }
 
         // disable in terminal range
-        float slant = Distance(pos, pip);
+        float slant = Distance(pos, seeker.knownPos);
         if (slant <= seeker.terminalRange)
         {
             // log terminal info if verbose logging is enabled
@@ -382,25 +403,6 @@ public static class LoftGuidance
         float maxStep = s.XfLagRate * dt;
         st.XfUsed += Mathf.Clamp(xfNow - st.XfUsed, -maxStep, maxStep);
         st.LastXfDrift = xfNow - st.XfUsed;
-
-        // Cross-fade to a new profile shape if one was queued.
-        // fade bump -> bumpTarget; lengths can differ between cells, so only
-        // fade the overlap and snap anything beyond it.
-        if (st.BumpTarget?.Length > 0)
-        {
-            float a = Mathf.Clamp01(dt / Mathf.Max(s.BumpFadeS, 1e-3f));
-            if (st.Bump == null || st.Bump.Length != st.BumpTarget.Length)
-            {
-                st.Bump = (double[])st.BumpTarget.Clone();
-            }
-            else
-            {
-                for (int i = 0; i < st.Bump.Length; i++)
-                {
-                    st.Bump[i] += (st.BumpTarget[i] - st.Bump[i]) * a;
-                }
-            }
-        }
 
         // lag the altitude axis too
         // Guard 1 above lags the range, because an unlagged xfNow turns a
@@ -455,26 +457,10 @@ public static class LoftGuidance
         // from this term.
         hAp += s.TrackGain * trackErr;
 
-        // build the aimpoint
-        // Aim along the line to the CURRENT pip, so the horizontal command
-        // tracks a turning target too.
         GlobalPosition ap = pos + (dirNow * d);
-        float apY = Mathf.Max((float)hAp, s.FloorAltM);
+        float apHoriz = d; // dirNow is flat and normalized
+        float apY = (float)hAp;
 
-        // Bound the commanded angle relative to the profile's own slope.
-        //
-        // The aimpoint sits d = clamp(3*V, 800, 15000) metres ahead, so ANY
-        // altitude difference between the missile and the reference at that
-        // point becomes atan(dh / d) of commanded flight path angle -- and d
-        // shrinks as the missile slows.
-        //
-        // Clamping the TrackGain term did not touch this, because the
-        // steepness comes from the altitude error itself and not from the
-        // correction. This clamps the total deviation instead, so the missile
-        // converges on the profile at a bounded rate whatever its speed.
-        float apHoriz = Mathf.Sqrt(((FX(ap) - FX(pos)) * (FX(ap) - FX(pos))) +
-                                   ((FZ(ap) - FZ(pos)) * (FZ(ap) - FZ(pos))));
-        apHoriz = Mathf.Max(apHoriz, 1f);
         float slope = Mathf.Atan2((float)(hAp - hRef), Mathf.Max(d, 1f));
         float want = Mathf.Atan2(apY - FY(pos), apHoriz);
         st.WantDev = Mathf.Rad2Deg * (want - slope);
@@ -482,23 +468,30 @@ public static class LoftGuidance
         {
             float lim = s.MaxTrackAngleDeg * Mathf.Deg2Rad;
             float cmdAng = slope + Mathf.Clamp(want - slope, -lim, lim);
-            apY = FY(pos) + (Mathf.Tan(cmdAng) * apHoriz);
-            ap.y = apY;
+            apY = FY(pos) + Mathf.Tan(cmdAng) * apHoriz;
         }
 
-        // Never command into the ground, and never put the aimpoint behind 
-        // the missile -- that trips ARHSeeker.MissedTarget()
-        // and self-destructs the round.
+        // Apply the floor AFTER the angular correction, so it cannot bypass it.
+        apY = Mathf.Max(apY, s.FloorAltM);
+        if (!IsFinite(apY))
+            return false;
+        ap.y = apY;
+
         float minAhead = Mathf.Max(300f, 1.5f * m.speed);
-        Vector3 fwd = m.rb.velocity.sqrMagnitude > 1f ? m.rb.velocity.normalized : m.transform.forward;
+        Vector3 velocity = m.rb.velocity;
+        Vector3 fwd = velocity.sqrMagnitude > 1f ? velocity.normalized : m.transform.forward;
         Vector3 toAp = new(FX(ap) - FX(pos), apY - FY(pos), FZ(ap) - FZ(pos));
         float ahead = Vector3.Dot(toAp, fwd);
         if (ahead < minAhead)
         {
-            ap = pos + toAp + (fwd * (minAhead - ahead));
-        }
+            float horizSq = fwd.x * fwd.x + fwd.z * fwd.z;
+            if (horizSq < 0.1f)
+                return false; // Near-vertical: retain vanilla's aimpoint
 
-        ap.y = apY;
+            float correction = (minAhead - ahead) / horizSq;
+            ap.x += fwd.x * correction;
+            ap.z += fwd.z * correction;
+        }
 
         if (s.DebugDraw)
         {

@@ -34,13 +34,6 @@ internal static class TableRouter
             return d;
         }
 
-        if (tables.Count == 1)
-        {
-            foreach (KeyValuePair<string, LoftTable> kv in tables)
-            {
-                return kv.Value;
-            }
-        }
         return null;
     }
 }
@@ -67,12 +60,12 @@ internal static class SeekerInitializePatch
                 return;
             }
 
-            __instance.loftAmount = 0f;
-            LoftGuidance.Get(__instance).LoftZeroed = true;
+            // OnInitialize disables vanilla loft only after finding a cell
             LoftGuidance.OnInitialize(__instance, table, Plugin.Settings, Plugin.Log);
         }
         catch (Exception e)
         {
+            LoftGuidance.RestoreVanilla(__instance);
             Plugin.Fail("Initialize", e);
         }
     }
@@ -85,21 +78,20 @@ internal static class SeekerInitializePatch
 internal static class SeekerSeekPatch
 {
     [UsedImplicitly]
+    [HarmonyPostfix]
     private static void Postfix(ARHSeeker __instance)
     {
         if (!Plugin.Ready || __instance.missile?.LocalSim != true)
-        {
             return;
-        }
 
         try
         {
-            LoftGuidance.MaintainTargetDist(__instance);
             LoftGuidance.Override(__instance, Plugin.Settings, Plugin.Log);
         }
         catch (Exception e)
         {
-            Plugin.Fail("Seek", e);
+            LoftGuidance.RestoreVanilla(__instance);
+            Plugin.Fail("Seek.Postfix", e);
         }
     }
 }
@@ -108,6 +100,34 @@ internal static class SeekerSeekPatch
 internal static class SlowChecksTelemetryPatch
 {
     [UsedImplicitly]
+    [HarmonyPrefix]
+    private static void Prefix(ARHSeeker __instance)
+    {
+        if (__instance.missile?.LocalSim != true ||
+            !LoftGuidance.TryGet(__instance, out LoftState st) || !st.LoftZeroed)
+            return;
+
+        if (!Plugin.Ready)
+        {
+            LoftGuidance.RestoreVanilla(__instance);
+            return;
+        }
+
+        try
+        {
+            // Vanilla computes targetDist from SlowChecks once a second,
+            // but only while loftAmount > 0. Retain that cadence.
+            LoftGuidance.MaintainTargetDist(__instance);
+        }
+        catch (Exception e)
+        {
+            LoftGuidance.RestoreVanilla(__instance);
+            Plugin.Fail("SlowChecks.Prefix", e);
+        }
+    }
+
+    [UsedImplicitly]
+    [HarmonyPostfix]
     private static void Postfix(ARHSeeker __instance)
     {
         if (!Plugin.Ready || !Plugin.Settings.Verbose ||
@@ -118,8 +138,7 @@ internal static class SlowChecksTelemetryPatch
 
         try
         {
-            LoftState st = LoftGuidance.Get(__instance);
-            if (!st.Engaged)
+            if (!LoftGuidance.TryGet(__instance, out LoftState st) || !st.Engaged)
             {
                 return;
             }
