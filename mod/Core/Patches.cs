@@ -29,12 +29,7 @@ internal static class TableRouter
             }
         }
 
-        if (tables.TryGetValue("default", out LoftTable d))
-        {
-            return d;
-        }
-
-        return null;
+        return tables.TryGetValue("default", out LoftTable d) ? d : null;
     }
 }
 
@@ -82,7 +77,9 @@ internal static class SeekerSeekPatch
     private static void Postfix(ARHSeeker __instance)
     {
         if (!Plugin.Ready || __instance.missile?.LocalSim != true)
+        {
             return;
+        }
 
         try
         {
@@ -105,7 +102,9 @@ internal static class SlowChecksTelemetryPatch
     {
         if (__instance.missile?.LocalSim != true ||
             !LoftGuidance.TryGet(__instance, out LoftState st) || !st.LoftZeroed)
+        {
             return;
+        }
 
         if (!Plugin.Ready)
         {

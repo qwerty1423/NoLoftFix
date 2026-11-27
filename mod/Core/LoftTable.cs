@@ -73,8 +73,8 @@ public sealed class LoftCell
     public double Fit_rmse_m;
     public bool Converged;
     public string Missile = "";
-    public string health = "";
-    public bool feasible = true;
+    public string Health = "";
+    public bool Feasible = true;
 
     /// <summary>
     /// <para>
@@ -276,9 +276,9 @@ public sealed class LoftTable
                 RejectedSlow++;
                 continue;
             }
-            
-            
-            if (rejectInfeasibleCells && (!c.feasible || string.Equals(c.health, "infeasible", StringComparison.OrdinalIgnoreCase)))
+
+
+            if (rejectInfeasibleCells && (!c.Feasible || string.Equals(c.Health, "infeasible", StringComparison.OrdinalIgnoreCase)))
             {
                 RejectedInfeasible++;
                 continue;
@@ -288,13 +288,18 @@ public sealed class LoftTable
             // Reject corrupt polynomial coefficients regardless of solver metadata
             bool finite = true;
             foreach (double coeff in c.Poly_a)
+            {
                 if (double.IsNaN(coeff) || double.IsInfinity(coeff))
                 {
                     finite = false;
                     break;
                 }
+            }
+
             if (!finite)
+            {
                 continue;
+            }
 
             list.Add(c);
         }
@@ -373,7 +378,9 @@ public sealed class LoftTable
         // per-cell coordinate-array allocations for every missile launch.
         (LoftCell cell, float dSq)[] best = new (LoftCell cell, float dSq)[n];
         for (int i = 0; i < n; i++)
+        {
             best[i] = (null, float.MaxValue);
+        }
 
         foreach (LoftCell c in _cells)
         {
@@ -406,10 +413,15 @@ public sealed class LoftTable
             }
 
             if (distSq >= best[n - 1].dSq)
+            {
                 continue;
+            }
+
             best[n - 1] = (c, distSq);
             for (int i = n - 1; i > 0 && best[i].dSq < best[i - 1].dSq; i--)
+            {
                 (best[i], best[i - 1]) = (best[i - 1], best[i]);
+            }
         }
 
         LastDistance = best[0].cell == null ? float.NaN : Mathf.Sqrt(best[0].dSq);
@@ -424,7 +436,9 @@ public sealed class LoftTable
             return null;
         }
         if (best[0].dSq < 1e-8f)
+        {
             return best[0].cell;
+        }
 
         int m = 0;
         double wsum = 0.0;
@@ -436,7 +450,9 @@ public sealed class LoftTable
             m++;
         }
         if (m == 0 || wsum <= 0 || double.IsInfinity(wsum) || double.IsNaN(wsum))
+        {
             return best[0].cell;
+        }
 
         int order = best[0].cell.Poly_a.Length;
         double[] blended = new double[order];
@@ -445,7 +461,9 @@ public sealed class LoftTable
             double wi = 1.0 / Math.Pow(Math.Max(best[i].dSq, 1e-12), exponent) / wsum;
             double[] pa = best[i].cell.Poly_a;
             for (int j = 0; j < order; j++)
+            {
                 blended[j] += wi * (j < pa.Length ? pa[j] : 0.0);
+            }
         }
         return new LoftCell
         {

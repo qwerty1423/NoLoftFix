@@ -106,7 +106,9 @@ public static class LoftGuidance
     public static void RestoreVanilla(ARHSeeker seeker)
     {
         if (seeker == null || !TryGet(seeker, out LoftState st))
+        {
             return;
+        }
 
         if (st.LoftZeroed)
         {
@@ -163,7 +165,10 @@ public static class LoftGuidance
     {
         Missile m = seeker.missile;
         if (m == null || table == null || table.Count == 0)
+        {
             return;
+        }
+
         LoftState st = Get(seeker);
 
         st.OriginalLoftAmount = seeker.loftAmount;
@@ -225,7 +230,7 @@ public static class LoftGuidance
         float launchSpeed = m.rb != null
             ? m.rb.velocity.magnitude
             : m.speed;
-        
+
         if (launchSpeed >= MinLookupSpeed)
         {
             DoLookup(seeker, st, table, s, log, launchSpeed);
@@ -316,33 +321,45 @@ public static class LoftGuidance
     public static bool Override(ARHSeeker seeker, LoftSettings s, Action<string> log)
     {
         if (!TryGet(seeker, out LoftState st))
+        {
             return false;
-        
+        }
+
         Missile m = seeker.missile;
         if (m == null || m.disabled || m.rb == null)
+        {
             return false;
-        
+        }
+
         if (m.targetID.NotValid || seeker.targetUnit == null || seeker.targetUnit.disabled || seeker.radarLockEstablished)
+        {
             return false;
-        
+        }
+
         if (st.NeedLookup && st.Table != null && m.speed >= MinLookupSpeed)
         {
             st.NeedLookup = false;
             DoLookup(seeker, st, st.Table, st.Settings ?? s, st.Log ?? log, m.speed);
         }
-        
+
         if (!seeker.guidance)
+        {
             return false;
-        
+        }
+
         if (!st.Engaged || st.Cell == null || !st.LoftZeroed)
+        {
             return false;
-        
+        }
+
         float dt = Mathf.Max(Time.fixedDeltaTime, 1e-3f);
         GlobalPosition pos = m.GlobalPosition();
 
         GlobalPosition pip = m.aimPoint;
         if (!IsFinite(FX(pip)) || !IsFinite(FY(pip)) || !IsFinite(FZ(pip)))
+        {
             return false;
+        }
 
         // check PIP movement
         float pipDx = FX(pip) - st.LastPipX, pipDz = FZ(pip) - st.LastPipZ;
@@ -468,13 +485,16 @@ public static class LoftGuidance
         {
             float lim = s.MaxTrackAngleDeg * Mathf.Deg2Rad;
             float cmdAng = slope + Mathf.Clamp(want - slope, -lim, lim);
-            apY = FY(pos) + Mathf.Tan(cmdAng) * apHoriz;
+            apY = FY(pos) + (Mathf.Tan(cmdAng) * apHoriz);
         }
 
         // Apply the floor AFTER the angular correction, so it cannot bypass it.
         apY = Mathf.Max(apY, s.FloorAltM);
         if (!IsFinite(apY))
+        {
             return false;
+        }
+
         ap.y = apY;
 
         float minAhead = Mathf.Max(300f, 1.5f * m.speed);
@@ -484,9 +504,11 @@ public static class LoftGuidance
         float ahead = Vector3.Dot(toAp, fwd);
         if (ahead < minAhead)
         {
-            float horizSq = fwd.x * fwd.x + fwd.z * fwd.z;
+            float horizSq = (fwd.x * fwd.x) + (fwd.z * fwd.z);
             if (horizSq < 0.1f)
+            {
                 return false; // Near-vertical: retain vanilla's aimpoint
+            }
 
             float correction = (minAhead - ahead) / horizSq;
             ap.x += fwd.x * correction;
