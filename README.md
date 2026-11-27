@@ -9,8 +9,6 @@ Vanilla 0.34.2
 With loft fix
 <img alt="lofting with loft fix" src="https://github.com/user-attachments/assets/a2b648b9-ea11-4456-b546-1fdd122d115f" />
 
-[NO discord mod forum post](https://discord.com/channels/909034158205059082/1557018166868312094/1557018166868312094)
-
 LLMs were used to make this mod
 
 some files were omitted from the repo
